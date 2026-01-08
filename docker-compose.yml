@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: meal-planner-db
+    environment:
+      POSTGRES_DB: mealplanner
+      POSTGRES_USER: mealplanner
+      POSTGRES_PASSWORD: mealplanner
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mealplanner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - meal-planner-network
+
+  # Authentication Service
+  authentication:
+    build: ./authentication
+    container_name: authentication
+    ports:
+      - "8001:8001"
+    environment:
+      SECRET_KEY: your-secret-key-change-this-in-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: http://localhost:8001/auth/google/callback
+    depends_on:
+      - postgres
+    networks:
+      - meal-planner-network
+
+  # Database Service
+  database-service:
+    build: ./database-service
+    container_name: database-service
+    ports:
+      - "8002:8002"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: mealplanner
+      DB_USER: mealplanner
+      DB_PASSWORD: mealplanner
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - meal-planner-network
+
+  # Meal Proposer Service
+  meal-proposer:
+    build: ./meal-proposer
+    container_name: meal-proposer
+    ports:
+      - "8003:8003"
+    networks:
+      - meal-planner-network
+
+  # Meal Planner Service
+  meal-planner-pcl:
+    build: ./meal-planner-pcl
+    container_name: meal-planner-pcl
+    ports:
+      - "8004:8004"
+    environment:
+      MEAL_PROPOSER_URL: http://meal-proposer:8003
+      DATABASE_SERVICE_URL: http://database-service:8002
+    depends_on:
+      - meal-proposer
+      - database-service
+    networks:
+      - meal-planner-network
+
+  # Recipe CRUD Interaction Service
+  recipe-crud-interaction:
+    build: ./recipe-crud-interaction
+    container_name: recipe-crud-interaction
+    ports:
+      - "8005:8005"
+    environment:
+      DATABASE_SERVICE_URL: http://database-service:8002
+    depends_on:
+      - database-service
+    networks:
+      - meal-planner-network
+
+  # Recipes Fetch Service
+  recipes-fetch-service:
+    build: ./recipes-fetch-service
+    container_name: recipes-fetch-service
+    ports:
+      - "8006:8006"
+    networks:
+      - meal-planner-network
+
+  # Streamlit GUI
+  streamlit:
+    build: ./streamlit
+    container_name: streamlit-gui
+    ports:
+      - "8501:8501"
+    environment:
+      AUTH_SERVICE_URL: http://authentication:8001
+      DATABASE_SERVICE_URL: http://database-service:8002
+      MEAL_PROPOSER_URL: http://meal-proposer:8003
+      MEAL_PLANNER_URL: http://meal-planner-pcl:8004
+      RECIPE_CRUD_URL: http://recipe-crud-interaction:8005
+      RECIPES_FETCH_URL: http://recipes-fetch-service:8006
+    depends_on:
+      - authentication
+      - database-service
+      - meal-proposer
+      - meal-planner-pcl
+      - recipe-crud-interaction
+      - recipes-fetch-service
+    networks:
+      - meal-planner-network
+
+volumes:
+  postgres_data:
+
+networks:
+  meal-planner-network:
+    driver: bridge
