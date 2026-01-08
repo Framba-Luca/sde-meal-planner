@@ -62,11 +62,11 @@ def login_page():
     st.title("🍽️ Meal Planner")
     st.subheader("Login")
     
-    tab1, tab2 = st.tabs(["Username/Password", "Google OAuth"])
+    tab1, tab2, tab3 = st.tabs(["Login", "Register", "Google OAuth"])
     
     with tab1:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
         
         if st.button("Login"):
             data = {"username": username, "password": password}
@@ -82,6 +82,28 @@ def login_page():
                 st.error("Invalid username or password")
     
     with tab2:
+        st.subheader("Create Account")
+        reg_username = st.text_input("Username", key="reg_username")
+        reg_password = st.text_input("Password", type="password", key="reg_password")
+        reg_full_name = st.text_input("Full Name (optional)", key="reg_full_name")
+        
+        if st.button("Register"):
+            if not reg_username or not reg_password:
+                st.error("Username and password are required")
+            else:
+                data = {
+                    "username": reg_username,
+                    "password": reg_password,
+                    "full_name": reg_full_name if reg_full_name else None
+                }
+                result = make_request(f"{AUTH_SERVICE_URL}/register", method="POST", data=data)
+                
+                if result:
+                    st.success("Account created successfully! Please login.")
+                else:
+                    st.error("Failed to create account. Username may already exist.")
+    
+    with tab3:
         if st.button("Login with Google"):
             # In a real implementation, this would redirect to Google OAuth
             st.info("Google OAuth integration requires proper setup. Please use username/password for now.")
