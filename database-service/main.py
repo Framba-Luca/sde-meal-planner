@@ -13,6 +13,17 @@ app = FastAPI(title="Database Service", version="1.0.0")
 db_service = DatabaseService()
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on startup"""
+    print("Initializing database tables...")
+    success = db_service.initialize_tables()
+    if success:
+        print("Database tables initialized successfully")
+    else:
+        print("Warning: Failed to initialize database tables")
+
+
 # Pydantic models
 class UserCreate(BaseModel):
     username: str
