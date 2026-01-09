@@ -5,11 +5,11 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 import os
 import hashlib
-import requests
 import httpx
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from fastapi import HTTPException, status
+from urllib.parse import urlencode
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
@@ -49,19 +49,14 @@ class AuthService:
         password_bytes = password.encode('utf-8')
         sha256_hash = hashlib.sha256(password_bytes).hexdigest()
         return pwd_context.hash(sha256_hash)
-        """Hash a password (bcrypt max 72 bytes)"""
-        # Truncate if longer than 72 bytes (bcrypt limit)
-        if len(password.encode()) > 72:
-            password = password[:72]
-        return pwd_context.hash(password)
     
     def create_access_token(self, data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token"""
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.utcnow() + expires_delta
+            expire = datetime.now() + expires_delta
         else:
-            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt
@@ -139,3 +134,87 @@ class AuthService:
             "full_name": user.get("full_name", ""),
             "disabled": user.get("disabled", False)
         }
+    
+    def get_google_auth_url(self) -> str:
+        "Return Google OAuth2 authorization"
+        params = {
+            "client_id" : GOOGLE_CLIENT_ID,
+            "redirect_uri" : GOOGLE_REDIRECT_URI,
+            "response_type" : "code",
+            "scope" : "openid email profile",
+            "access_type": "offline",
+            "prompt": "consent"
+        }
+
+        return f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
+    
+    async def handle_oauth_login(self, code: str) -> Optional[Dict[str, Any]]:
+        """
+        Exchange code for tokens and get userInfo, create or lookup user in DB,
+        and return token payload (same shape as handle_login)
+        """
+
+        token_url = "https://oauth2.googleapis.com/token"
+        userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo"
+
+        async with httpx.AsyncClient() as client:
+            # Exchange code for tokens
+
+            data = {
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code"
+            }
+
+            tok_resp = await client.post(token_url, data=data, timeout=10.0)
+            if tok_resp.status_code != 200:
+                return None
+            tok_json = tok_resp.json()
+            access_token = tok_json.get("access_token")
+            if not access_token:
+                return None
+            
+            # Get user info
+            headers = {"Authorization": f"Bearer {access_token}"}
+            userinfo_resp = await client.get(userinfo_url, headers=headers, timeout=10.0)
+            if userinfo_resp.status_code != 200:
+                return None
+            info = userinfo_resp.json()
+            
+            #info contains: sub, email, name, given_name
+            email = info.get("email")
+            if not email:
+                return None
+            username = email.split("@")[0]
+            full_name = info.get("name", username)
+
+            #check if user exists, else create in db
+            user = await self.get_user(username)
+            if not user:
+                import secrets
+                placeholder_password = secrets.token_urlsafe(32)
+                create_user = await self.create_user(
+                    username=username,
+                    password=placeholder_password,
+                    full_name=full_name
+                )
+                if not create_user:
+                    return None
+                user = create_user
+
+
+            #Buld and return token payload
+            access = self.create_access_token(
+                data={"sub": user["username"], 
+                      "full_name": user.get("full_name", "")}
+            )
+            return {
+                "access_token": access,
+                "token_type": "bearer",
+                "user": {
+                    "username": user["username"],
+                    "full_name": user.get("full_name", "")
+                }
+            }

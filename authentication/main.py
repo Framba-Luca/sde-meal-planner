@@ -3,9 +3,14 @@ Authentication Service - REST API endpoints
 """
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
 from service import AuthService
+from urllib.parse import urlencode
+import os
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8501")
 
 app = FastAPI(title="Authentication Service", version="1.0.0")
 
@@ -106,13 +111,31 @@ async def get_google_auth_url():
 @app.post("/auth/google/callback", response_model=Token)
 async def google_callback(request: GoogleAuthRequest):
     """Handle Google OAuth2 callback"""
-    result = auth_service.handle_oauth_login(request.code)
+    result = await auth_service.handle_oauth_login(request.code)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to authenticate with Google"
         )
     return Token(**result)
+
+
+@app.get("/auth/google/callback")
+async def google_callback_redirect(code: str = None, error: str = None):
+    """Handle OAuth callback and redirect to frontend with token"""
+    if error or not code:
+        return RedirectResponse(f"{FRONTEND_URL}?error={error or 'no_code'}")
+    
+    result = await auth_service.handle_oauth_login(code)
+    if not result:
+        return RedirectResponse(f"{FRONTEND_URL}?error=auth_failed")
+    
+    params = {
+        "token": result["access_token"],
+        "username": result["user"]["username"],
+        "full_name": result["user"]["full_name"]
+    }
+    return RedirectResponse(f"{FRONTEND_URL}?{urlencode(params)}")
 
 
 @app.get("/users/me", response_model=User)

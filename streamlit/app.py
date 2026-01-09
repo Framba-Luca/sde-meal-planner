@@ -54,6 +54,18 @@ def initialize_session_state():
         st.session_state.user = None
     if "token" not in st.session_state:
         st.session_state.token = None
+    # Consume token from URL (OAuth redirect from auth service)
+    params = st.experimental_get_query_params()
+    if params:
+        token = params.get("token", [None])[0]
+        username = params.get("username", [None])[0]
+        full_name = params.get("full_name", [None])[0]
+        if token:
+            st.session_state.token = token
+            st.session_state.authenticated = True
+            st.session_state.user = {"username": username, "full_name": full_name}
+            # clear query params to avoid reprocessing
+            st.experimental_set_query_params()
 
 
 # Authentication functions
@@ -104,10 +116,33 @@ def login_page():
                     st.error("Failed to create account. Username may already exist.")
     
     with tab3:
-        if st.button("Login with Google"):
-            # In a real implementation, this would redirect to Google OAuth
-            st.info("Google OAuth integration requires proper setup. Please use username/password for now.")
-
+        st.subheader("Google Login")
+        try:
+            # 1. Streamlit chiede al backend l'URL di Google (server-to-server)
+            # Nota: AUTH_SERVICE_URL qui è interno a Docker (es. http://authentication:8001)
+            response = requests.get(f"{AUTH_SERVICE_URL}/auth/google/url", timeout=5)
+            
+            if response.status_code == 200:
+                # 2. Estraiamo l'URL vero di Google dal JSON
+                google_auth_url = response.json().get("auth_url")
+                
+                # 3. Creiamo il bottone che punta a Google
+                if google_auth_url:
+                    st.link_button(
+                        label="Accedi con Google", 
+                        url=google_auth_url, 
+                        type="primary",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("URL di autenticazione non valido.")
+            else:
+                st.error(f"Errore comunicazione backend: {response.status_code}")
+                
+        except requests.exceptions.ConnectionError:
+            st.error("Impossibile contattare il servizio di autenticazione.")
+        except Exception as e:
+            st.error(f"Errore: {e}")
 
 def logout():
     """Logout user"""
