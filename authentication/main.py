@@ -137,6 +137,21 @@ async def verify_token(token: str):
     return {"valid": True, "payload": payload}
 
 
+@app.get("/users")
+async def list_users():
+    """List all registered users (for debugging/administration)"""
+    users = []
+    for username, user_data in auth_service.users_db.items():
+        # Return user data without the hashed password
+        users.append({
+            "username": user_data["username"],
+            "full_name": user_data["full_name"],
+            "disabled": user_data["disabled"],
+            "created_at": user_data["created_at"]
+        })
+    return {"users": users, "count": len(users)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)

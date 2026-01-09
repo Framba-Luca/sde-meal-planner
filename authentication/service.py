@@ -4,6 +4,7 @@ Authentication Service - Handles user authentication with OAuth2 and JWT
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 import os
+import hashlib
 import requests
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -32,11 +33,17 @@ class AuthService:
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash"""
-        return pwd_context.verify(plain_password, hashed_password)
+        # Hash the password with SHA256 first to handle bcrypt's 72-byte limit
+        password_bytes = plain_password.encode('utf-8')
+        sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+        return pwd_context.verify(sha256_hash, hashed_password)
     
     def get_password_hash(self, password: str) -> str:
         """Hash a password"""
-        return pwd_context.hash(password)
+        # Hash the password with SHA256 first to handle bcrypt's 72-byte limit
+        password_bytes = password.encode('utf-8')
+        sha256_hash = hashlib.sha256(password_bytes).hexdigest()
+        return pwd_context.hash(sha256_hash)
     
     def create_access_token(self, data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
         """Create a JWT access token"""
