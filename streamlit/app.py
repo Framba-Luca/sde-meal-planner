@@ -82,7 +82,7 @@ def login_page():
         
         if st.button("Login"):
             data = {"username": username, "password": password}
-            result = make_request(f"{AUTH_SERVICE_URL}/token", method="POST", data=data)
+            result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/login", method="POST", data=data)
             
             if result:
                 st.session_state.authenticated = True
@@ -108,7 +108,7 @@ def login_page():
                     "password": reg_password,
                     "full_name": reg_full_name if reg_full_name else None
                 }
-                result = make_request(f"{AUTH_SERVICE_URL}/register", method="POST", data=data)
+                result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/register", method="POST", data=data)
                 
                 if result:
                     st.success("Account created successfully! Please login.")
@@ -120,11 +120,11 @@ def login_page():
         try:
             # 1. Streamlit chiede al backend l'URL di Google (server-to-server)
             # Nota: AUTH_SERVICE_URL qui è interno a Docker (es. http://authentication:8001)
-            response = requests.get(f"{AUTH_SERVICE_URL}/auth/google/url", timeout=5)
+            response = requests.get(f"{AUTH_SERVICE_URL}/api/v1/auth/google/login", timeout=5, allow_redirects=False)
             
-            if response.status_code == 200:
-                # 2. Estraiamo l'URL vero di Google dal JSON
-                google_auth_url = response.json().get("auth_url")
+            if response.status_code == 307:  # Redirect status
+                # 2. Estraiamo l'URL vero di Google dal redirect location header
+                google_auth_url = response.headers.get("location")
                 
                 # 3. Creiamo il bottone che punta a Google
                 if google_auth_url:

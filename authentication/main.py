@@ -1,176 +1,58 @@
-"""
-Authentication Service - REST API endpoints
-"""
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
-from typing import Optional
-from service import AuthService
-from urllib.parse import urlencode
-import os
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8501")
+from src.core.config import settings
+from src.core import exceptions as exc
 
-app = FastAPI(title="Authentication Service", version="1.0.0")
+from src.api.v1.router import api_router 
 
-# Initialize service
-auth_service = AuthService()
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# --- CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.FRONTEND_URL,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# --- Exception Handlers ---
+@app.exception_handler(exc.InvalidCredentials)
+async def invalid_credentials_handler(request: Request, exc: exc.InvalidCredentials):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
-# Pydantic models
-class UserCreate(BaseModel):
-    username: str
-    password: str
-    full_name: Optional[str] = None
+@app.exception_handler(exc.UserAlreadyExists)
+async def user_exists_handler(request: Request, exc: exc.UserAlreadyExists):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)},
+    )
 
+@app.exception_handler(exc.ServiceUnavailable)
+async def service_unavailable_handler(request: Request, exc: exc.ServiceUnavailable):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Service temporarily unavailable, please try again later."},
+    )
 
-class User(BaseModel):
-    username: str
-    full_name: str
-    disabled: bool = False
+# --- Include Routers ---
+# Qui avviene la magia: una sola riga per tutta l'API V1
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: User
-
-
-class GoogleAuthRequest(BaseModel):
-    code: str
-
-
-class GoogleAuthUrlResponse(BaseModel):
-    auth_url: str
-
-
-# Dependency to get current user
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
-    """Get current authenticated user from token"""
-    user_data = auth_service.get_current_user(token)
-    if user_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return User(**user_data)
-
-
-# Endpoints
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {"service": "Authentication Service", "status": "running"}
-
-
+# --- Health Check ---
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
-
-
-@app.post("/register", response_model=User)
-async def register(user: UserCreate):
-    """Register a new user"""
-    created_user = await auth_service.create_user(
-        username=user.username,
-        password=user.password,
-        full_name=user.full_name
-    )
-    return User(
-        username=created_user["username"],
-        full_name=created_user["full_name"],
-        disabled=created_user.get("disabled", False)
-    )
-
-
-@app.post("/token", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    result = await auth_service.handle_login(form_data.username, form_data.password)
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return Token(**result)
-
-
-@app.get("/auth/google/url", response_model=GoogleAuthUrlResponse)
-async def get_google_auth_url():
-    """Get Google OAuth2 authorization URL"""
-    auth_url = auth_service.get_google_auth_url()
-    return GoogleAuthUrlResponse(auth_url=auth_url)
-
-
-@app.post("/auth/google/callback", response_model=Token)
-async def google_callback(request: GoogleAuthRequest):
-    """Handle Google OAuth2 callback"""
-    result = await auth_service.handle_oauth_login(request.code)
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to authenticate with Google"
-        )
-    return Token(**result)
-
-
-@app.get("/auth/google/callback")
-async def google_callback_redirect(code: str = None, error: str = None):
-    """Handle OAuth callback and redirect to frontend with token"""
-    if error or not code:
-        return RedirectResponse(f"{FRONTEND_URL}?error={error or 'no_code'}")
-    
-    result = await auth_service.handle_oauth_login(code)
-    if not result:
-        return RedirectResponse(f"{FRONTEND_URL}?error=auth_failed")
-    
-    params = {
-        "token": result["access_token"],
-        "username": result["user"]["username"],
-        "full_name": result["user"]["full_name"]
-    }
-    return RedirectResponse(f"{FRONTEND_URL}?{urlencode(params)}")
-
-
-@app.get("/users/me", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_user)):
-    """Get current user information"""
-    return current_user
-
-
-@app.get("/verify")
-async def verify_token(token: str):
-    """Verify a token"""
-    payload = auth_service.verify_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-    return {"valid": True, "payload": payload}
-
-
-@app.get("/users")
-async def list_users():
-    """List all registered users (for debugging/administration)"""
-    users = []
-    for username, user_data in auth_service.users_db.items():
-        # Return user data without the hashed password
-        users.append({
-            "username": user_data["username"],
-            "full_name": user_data["full_name"],
-            "disabled": user_data["disabled"],
-            "created_at": user_data["created_at"]
-        })
-    return {"users": users, "count": len(users)}
-
+def health_check():
+    return {"status": "healthy", "service": settings.PROJECT_NAME}
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
