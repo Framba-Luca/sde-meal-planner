@@ -27,6 +27,8 @@ async def startup_event():
 # Pydantic models
 class UserCreate(BaseModel):
     username: str
+    hashed_password: str
+    email: Optional[str] = None
     full_name: Optional[str] = None
 
 
@@ -118,7 +120,11 @@ async def initialize_database():
 @app.post("/users", response_model=UserResponse)
 async def create_user(user: UserCreate):
     """Create a new user"""
-    result = db_service.create_user(user.username, user.full_name)
+    result = db_service.create_user(
+        username=user.username,
+        full_name=user.full_name,
+        hashed_password=user.hashed_password
+    )
     if result:
         return UserResponse(**result)
     raise HTTPException(
@@ -139,12 +145,12 @@ async def get_user(user_id: int):
     )
 
 
-@app.get("/users/username/{username}", response_model=UserResponse)
+@app.get("/users/username/{username}")
 async def get_user_by_username(username: str):
-    """Get user by username"""
+    """Get user by username (returns hashed_password for internal use)"""
     result = db_service.get_user_by_username(username)
     if result:
-        return UserResponse(**result)
+        return result
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="User not found"

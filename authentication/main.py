@@ -72,25 +72,21 @@ async def health_check():
 @app.post("/register", response_model=User)
 async def register(user: UserCreate):
     """Register a new user"""
-    try:
-        created_user = auth_service.create_user(
-            username=user.username,
-            password=user.password,
-            full_name=user.full_name
-        )
-        return User(
-            username=created_user["username"],
-            full_name=created_user["full_name"],
-            disabled=created_user["disabled"]
-        )
-    except HTTPException as e:
-        raise e
+    created_user = await auth_service.create_user(
+        username=user.username,
+        password=user.password,
+        full_name=user.full_name
+    )
+    return User(
+        username=created_user["username"],
+        full_name=created_user["full_name"],
+        disabled=created_user.get("disabled", False)
+    )
 
 
 @app.post("/token", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Login with username and password"""
-    result = auth_service.handle_login(form_data.username, form_data.password)
+    result = await auth_service.handle_login(form_data.username, form_data.password)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
