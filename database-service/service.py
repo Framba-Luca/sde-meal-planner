@@ -79,6 +79,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
         """Execute a SELECT query and return results"""
         try:
             self.cursor.execute(query, params)
+            if query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE')):
+                self.connection.commit()
             results = self.cursor.fetchall()
             return [dict(row) for row in results]
         except Exception as e:
@@ -129,16 +131,16 @@ class DatabaseService:
             self.adapter.connect()
     
     # User operations
-    def create_user(self, username: str, full_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def create_user(self, username: str, full_name: Optional[str] = None, hashed_password: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Create a new user"""
         query = """
-            INSERT INTO users (username, full_name)
-            VALUES (%s, %s)
-            RETURNING id, username, full_name, created_at
+            INSERT INTO users (username, full_name, hashed_password)
+            VALUES (%s, %s, %s)
+            RETURNING id, username, full_name, created_at::text;
         """
-        params = (username, full_name or username)
-        results = self.adapter.execute_query(query, params)
-        return results[0] if results else None
+        params = (username, full_name or username, hashed_password)
+        rows = self.adapter.execute_query(query, params)
+        return rows[0] if rows else None
     
     def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get user by ID"""
@@ -147,10 +149,10 @@ class DatabaseService:
         return results[0] if results else None
     
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
-        """Get user by username"""
-        query = "SELECT id, username, full_name, created_at FROM users WHERE username = %s"
-        results = self.adapter.execute_query(query, (username,))
-        return results[0] if results else None
+        """Get user by username (includes hashed_password)"""
+        query = "SELECT id, username, full_name, created_at, hashed_password FROM users WHERE username = %s"
+        rows = self.adapter.execute_query(query, (username,))
+        return rows[0] if rows else None
     
     def get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users"""
@@ -369,6 +371,8 @@ class DatabaseService:
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
                     username VARCHAR(50) UNIQUE NOT NULL,
+                    hashed_password VARCHAR(255),
+                    email VARCHAR(100),
                     full_name VARCHAR(100),
                     created_at TIMESTAMP DEFAULT NOW()
                 )
