@@ -26,6 +26,11 @@ st.set_page_config(
 # Helper functions
 def make_request(url, method="GET", data=None):
     """Make HTTP request to a service"""
+    headers = {}
+
+    if st.session_state.autheticated and st.session_state.token:
+        headers["Authorization"] = f"Bearer {st.session_state.token}"
+
     try:
         if method == "GET":
             response = requests.get(url)
@@ -40,6 +45,15 @@ def make_request(url, method="GET", data=None):
         
         if response.status_code == 200:
             return response.json()
+        elif response.status_code == 201:
+            return response.json()
+        elif response.status_code == 401:
+            st.error("Session expired or unauthorized. Please login again.")
+            st.session_state.authenticated = False
+            st.session_state.user = None
+            st.rerun()
+        elif response.status_code == 403:
+            st.error("Access denied. You do not have permission to perform this action.")
         return None
     except requests.RequestException as e:
         st.error(f"Error: {e}")
