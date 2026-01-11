@@ -18,7 +18,6 @@ def read_user_me(current_user: User = Depends(deps.get_current_user)):
 async def read_users(
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(deps.get_current_user), # Requires login
     user_repo: UserRemoteRepository = Depends(deps.get_user_repo)
 ):
     """
