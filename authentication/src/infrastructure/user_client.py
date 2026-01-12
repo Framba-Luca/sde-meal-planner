@@ -6,8 +6,12 @@ import src.core.exceptions as exc
 
 class UserRemoteRepository:
     def __init__(self):
-        self.base_url = settings.DATABASE_SERVICE_URL
-        # Timeout aggressivo: se il DB non risponde in 5 secondi, è inutile aspettare
+        base = settings.DATABASE_SERVICE_URL.rstrip("/")
+        if not base.endswith("/api/v1"):
+            self.base_url = f"{base}/api/v1"
+        else:
+            self.base_url = base
+            
         self.timeout = httpx.Timeout(5.0, connect=2.0)
 
     async def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
@@ -34,11 +38,12 @@ class UserRemoteRepository:
                 "username": user_in.username,
                 "full_name": user_in.full_name,
                 "hashed_password": hashed_password,
+                "email": user_in.email,
                 "disabled": False
             }
             
             try:
-                response = await client.post(f"{self.base_url}/users", json=payload)
+                response = await client.post(f"{self.base_url}/users/", json=payload)
                 
                 if response.status_code in (200, 201):
                     return response.json()
