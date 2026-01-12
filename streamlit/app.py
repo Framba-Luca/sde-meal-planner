@@ -35,22 +35,21 @@ def make_request(url, method="GET", data=None, use_form_data=False):
 
     try:
         if method == "GET":
-            response = requests.get(url)
+            response = requests.get(url, headers=headers)
         elif method == "POST":
+            # Automatically sets Content-Type to application/x-www-form-urlencoded if data is used
             if use_form_data:
-                response = requests.post(url, data=data)
+                response = requests.post(url, data=data, headers=headers)
             else:
-                response = requests.post(url, json=data)
+                response = requests.post(url, json=data, headers=headers)
         elif method == "PUT":
-            response = requests.put(url, json=data)
+            response = requests.put(url, json=data, headers=headers)
         elif method == "DELETE":
-            response = requests.delete(url)
+            response = requests.delete(url, headers=headers)
         else:
             return None
         
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 201:
+        if response.status_code in [200, 201]:
             return response.json()
         elif response.status_code == 401:
             st.error("Session expired or unauthorized. Please login again.")
@@ -59,6 +58,9 @@ def make_request(url, method="GET", data=None, use_form_data=False):
             st.rerun()
         elif response.status_code == 403:
             st.error("Access denied. You do not have permission to perform this action.")
+        elif response.status_code == 422:
+            st.error(f"Validation Error (422): {response.text}")
+            
         return None
     except requests.RequestException as e:
         st.error(f"Error: {e}")
@@ -73,18 +75,20 @@ def initialize_session_state():
         st.session_state.user = None
     if "token" not in st.session_state:
         st.session_state.token = None
+    
     # Consume token from URL (OAuth redirect from auth service)
-    params = st.experimental_get_query_params()
-    if params:
-        token = params.get("token", [None])[0]
-        username = params.get("username", [None])[0]
-        full_name = params.get("full_name", [None])[0]
-        if token:
-            st.session_state.token = token
-            st.session_state.authenticated = True
-            st.session_state.user = {"username": username, "full_name": full_name}
-            # clear query params to avoid reprocessing
-            st.experimental_set_query_params()
+    # Using experimental_get_query_params for older Streamlit versions support
+    query_params = st.experimental_get_query_params()
+    if "token" in query_params:
+        st.session_state.token = query_params["token"][0]
+        st.session_state.user = {
+            "username": query_params.get("username", ["User"])[0],
+            "full_name": query_params.get("full_name", [""])[0]
+        }
+        st.session_state.authenticated = True
+        # Clear query params
+        st.experimental_set_query_params()
+        st.rerun()
 
 
 # Authentication functions
@@ -100,23 +104,31 @@ def login_page():
         password = st.text_input("Password", type="password", key="login_password")
         
         if st.button("Login"):
-            data = {"username": username, "password": password}
-            result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/login", method="POST", data=data, use_form_data=True)
-            
-            if result:
-                st.session_state.authenticated = True
-                st.session_state.token = result["access_token"]
-                st.session_state.user = result["user"]
-                st.success("Login successful!")
-                st.rerun()
+            if not username or not password:
+                st.warning("Please enter username and password")
             else:
-                st.error("Invalid username or password")
+                data = {"username": username, "password": password}
+                # Ensure use_form_data=True for OAuth2 form request
+                result = make_request(
+                    f"{AUTH_SERVICE_URL}/api/v1/auth/login", 
+                    method="POST",
+                    data=data, 
+                    use_form_data=False
+                )
+                
+                if result:
+                    st.session_state.authenticated = True
+                    st.session_state.token = result["access_token"]
+                    st.session_state.user = result["user"]
+                    st.success("Login successful!")
+                    st.rerun()
     
     with tab2:
         st.subheader("Create Account")
         reg_username = st.text_input("Username", key="reg_username")
         reg_password = st.text_input("Password", type="password", key="reg_password")
         reg_full_name = st.text_input("Full Name (optional)", key="reg_full_name")
+        reg_email = st.text_input("Email (optional)", key="reg_email")
         
         if st.button("Register"):
             if not reg_username or not reg_password:
@@ -125,7 +137,8 @@ def login_page():
                 data = {
                     "username": reg_username,
                     "password": reg_password,
-                    "full_name": reg_full_name if reg_full_name else None
+                    "full_name": reg_full_name if reg_full_name else None,
+                    "email": reg_email if reg_email else None
                 }
                 result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/register", method="POST", data=data)
                 
@@ -136,32 +149,29 @@ def login_page():
     
     with tab3:
         st.subheader("Google Login")
-        try:
-            # 1. Streamlit chiede al backend l'URL di Google (server-to-server)
-            # Nota: AUTH_SERVICE_URL qui è interno a Docker (es. http://authentication:8001)
-            response = requests.get(f"{AUTH_SERVICE_URL}/api/v1/auth/google/login", timeout=5, allow_redirects=False)
-            
-            if response.status_code == 307:  # Redirect status
-                # 2. Estraiamo l'URL vero di Google dal redirect location header
-                google_auth_url = response.headers.get("location")
+        if st.button("Login with Google"):
+            try:
+                # 1. Streamlit asks backend for Google URL
+                response = requests.get(f"{AUTH_SERVICE_URL}/api/v1/auth/google/login", timeout=5, allow_redirects=False)
                 
-                # 3. Creiamo il bottone che punta a Google
-                if google_auth_url:
-                    st.link_button(
-                        label="Accedi con Google", 
-                        url=google_auth_url, 
-                        type="primary",
-                        use_container_width=True
-                    )
+                if response.status_code == 307:  # Redirect status
+                    google_auth_url = response.headers.get("location")
+                    if google_auth_url:
+                        st.link_button(
+                            label="Continue to Google", 
+                            url=google_auth_url, 
+                            type="primary",
+                            use_container_width=True
+                        )
+                    else:
+                        st.error("Invalid authentication URL.")
                 else:
-                    st.error("URL di autenticazione non valido.")
-            else:
-                st.error(f"Errore comunicazione backend: {response.status_code}")
+                    st.error(f"Backend communication error: {response.status_code}")
                 
-        except requests.exceptions.ConnectionError:
-            st.error("Impossibile contattare il servizio di autenticazione.")
-        except Exception as e:
-            st.error(f"Errore: {e}")
+            except requests.exceptions.ConnectionError:
+                st.error("Cannot contact authentication service.")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 def logout():
     """Logout user"""
