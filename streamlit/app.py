@@ -2,6 +2,7 @@
 Streamlit GUI - Main interface for the Meal Planner application
 """
 import streamlit as st
+import extra_streamlit_components as stx
 import requests
 from datetime import date, timedelta
 import os
@@ -37,10 +38,12 @@ def make_request(url, method="GET", data=None, use_form_data=False):
         if method == "GET":
             response = requests.get(url, headers=headers)
         elif method == "POST":
-            # Automatically sets Content-Type to application/x-www-form-urlencoded if data is used
+            # CHANGE: Corretto passaggio parametri.
             if use_form_data:
+                # Content-Type: application/x-www-form-urlencoded
                 response = requests.post(url, data=data, headers=headers)
             else:
+                # Content-Type: application/json
                 response = requests.post(url, json=data, headers=headers)
         elif method == "PUT":
             response = requests.put(url, json=data, headers=headers)
@@ -49,6 +52,7 @@ def make_request(url, method="GET", data=None, use_form_data=False):
         else:
             return None
         
+        # Gestione risposte
         if response.status_code in [200, 201]:
             return response.json()
         elif response.status_code == 401:
@@ -59,37 +63,83 @@ def make_request(url, method="GET", data=None, use_form_data=False):
         elif response.status_code == 403:
             st.error("Access denied. You do not have permission to perform this action.")
         elif response.status_code == 422:
-            st.error(f"Validation Error (422): {response.text}")
+            # Mostra errore dettagliato dal backend per debug
+            try:
+                detail = response.json().get('detail')
+                st.error(f"Validation Error (422): {detail}")
+            except:
+                st.error(f"Validation Error (422): {response.text}")
             
         return None
     except requests.RequestException as e:
         st.error(f"Error: {e}")
         return None
 
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
 
 def initialize_session_state():
     """Initialize session state variables"""
+    
+    # 1. Retrieves the token from cookies (if any)
+    cookie_token = cookie_manager.get(cookie="access_token")
+    
+    # Initialize the session if doesn't
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-    if "user" not in st.session_state:
-        st.session_state.user = None
     if "token" not in st.session_state:
         st.session_state.token = None
-    
-    # Consume token from URL (OAuth redirect from auth service)
-    # Using experimental_get_query_params for older Streamlit versions support
-    query_params = st.experimental_get_query_params()
+    if "user" not in st.session_state:
+        st.session_state.user = None
+
+    # Case A: We have a saved cookie -> Autologin
+    if cookie_token and not st.session_state.authenticated:
+        st.session_state.token = cookie_token
+        st.session_state.authenticated = True
+        # Nota: Qui user è generico perché nel cookie abbiamo solo il token.
+        # Idealmente dovresti fare una chiamata /me al backend per avere i dettagli aggiornati.
+        if not st.session_state.user:
+             st.session_state.user = {"username": "User", "full_name": "Welcome Back"}
+
+    # Case B: Google Login (Token in the URL)
+    try:
+        query_params = st.query_params
+    except AttributeError:
+        query_params = st.experimental_get_query_params()
+
     if "token" in query_params:
-        st.session_state.token = query_params["token"][0]
+        val = query_params["token"]
+        token = val[0] if isinstance(val, list) else val
+        
+        user_val = query_params.get("username", "User")
+        username = user_val[0] if isinstance(user_val, list) else user_val
+        
+        full_name_val = query_params.get("full_name", "")
+        full_name = full_name_val[0] if isinstance(full_name_val, list) else full_name_val
+
+        # Save in Session State
+        st.session_state.token = token
         st.session_state.user = {
-            "username": query_params.get("username", ["User"])[0],
-            "full_name": query_params.get("full_name", [""])[0]
+            "username": username,
+            "full_name": full_name
         }
         st.session_state.authenticated = True
-        # Clear query params
-        st.experimental_set_query_params()
-        st.rerun()
+        
+        # --- Save in the Cookie ---
+        cookie_manager.set("access_token", token, key="google_auth_token")
+        # -----------------------------------------------
 
+        # Clean the URL to remove token parameters
+        try:
+            st.query_params.clear()
+        except AttributeError:
+            st.experimental_set_query_params()
+        
+        # Refresh to have the updated state
+        st.rerun()
 
 # Authentication functions
 def login_page():
@@ -108,19 +158,18 @@ def login_page():
                 st.warning("Please enter username and password")
             else:
                 data = {"username": username, "password": password}
-                # Ensure use_form_data=True for OAuth2 form request
-                result = make_request(
-                    f"{AUTH_SERVICE_URL}/api/v1/auth/login", 
-                    method="POST",
-                    data=data, 
-                    use_form_data=False
-                )
+                
+                # FIX: Cambiato a use_form_data=False (default) per inviare JSON.
+                # L'errore 422 indicava che il backend si aspettava un oggetto (dict), non una stringa form-data.
+                result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/login", method="POST", data=data, use_form_data=True)
                 
                 if result:
                     st.session_state.authenticated = True
                     st.session_state.token = result["access_token"]
                     st.session_state.user = result["user"]
                     st.success("Login successful!")
+
+                    cookie_manager.set("access_token", result["access_token"], key="login_token")
                     st.rerun()
     
     with tab2:
@@ -140,6 +189,7 @@ def login_page():
                     "full_name": reg_full_name if reg_full_name else None,
                     "email": reg_email if reg_email else None
                 }
+                # La registrazione usa JSON
                 result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/register", method="POST", data=data)
                 
                 if result:
@@ -175,6 +225,7 @@ def login_page():
 
 def logout():
     """Logout user"""
+    cookie_manager.delete("access_token")
     st.session_state.authenticated = False
     st.session_state.user = None
     st.session_state.token = None

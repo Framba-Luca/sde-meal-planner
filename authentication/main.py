@@ -2,11 +2,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.core.config import settings
 from src.core import exceptions as exc
-
-from src.api.v1.router import api_router 
+from src.api.v1.router import api_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -46,7 +49,6 @@ async def service_unavailable_handler(request: Request, exc: exc.ServiceUnavaila
     )
 
 # --- Include Routers ---
-# Qui avviene la magia: una sola riga per tutta l'API V1
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # --- Health Check ---

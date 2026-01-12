@@ -1,19 +1,15 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
-from pydantic import BaseModel
+from typing import Annotated
 
-from src.core.config import settings
-from src.schemas.token import Token
-from src.schemas.user import User, UserCreate
 from src.services.auth_service import AuthService
 from src.services.oauth_service import GoogleAuthService
+from src.schemas.token import Token
+from src.schemas.user import UserCreate, User
 from src.api import deps
-
-# Request models for JSON body
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+from src.core.config import settings
 
 router = APIRouter()
 
@@ -21,13 +17,24 @@ router = APIRouter()
 
 @router.post("/login", response_model=Token)
 async def login_access_token(
-    login_req: LoginRequest,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     service: AuthService = Depends(deps.get_auth_service)
 ):
     """
     Login endpoint accepting JSON body.
     """
-    return await service.authenticate_user(login_req.username, login_req.password)
+    return await service.authenticate_user(form_data.username, form_data.password)
+
+@router.post("/refresh", response_model=Token)
+async def refresh_access_token(
+    refresh_token: Annotated[str, Header(alias="X-Refresh-Token")],
+    service: AuthService = Depends(deps.get_auth_service)
+):
+    """
+    Refresh access token using a valid refresh token.
+    The refresh token must be provided in the 'X-Refresh-Token' header.
+    """
+    return await service.refresh_access_token(refresh_token)
 
 @router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
 async def register_user(
@@ -38,6 +45,20 @@ async def register_user(
     Register a new user.
     """
     return await service.register_new_user(user_in)
+
+def get_token(authorization: Annotated[str, Header()] = None):
+    if not authorization:
+        return None
+    return authorization.split(" ")[1] if " " in authorization else authorization
+
+@router.post("/logout")
+async def logout(
+    token: str = Depends(get_token),
+    service: AuthService = Depends(deps.get_auth_service)
+):
+    if token: await service.logout(token)
+    return {"message": "Logged out"}
+
 
 # --- Google Auth ---
 
@@ -57,18 +78,21 @@ async def google_callback(
     Google Callback after login.
     Redirect to frontend with token.
     """
-    token_data = await service.callback_handler(code)
-    
-    # URL frontend redirection with token params
-    params = {
-        "token": token_data.access_token,
-        "username": token_data.user.username,
-        "full_name": token_data.user.full_name or ""
-    }
-    
-    # Example: http://localhost:8501?token=xyz&username=mario
-    return RedirectResponse(f"{settings.FRONTEND_URL}?{urlencode(params)}")
+    try:
+        token = await service.callback_handler(code)
 
+        # URL frontend redirection with token params
+        params = {
+            "access_token": token.access_token,
+            "refresh_token": token.refresh_token,
+            "username": token.user.username,
+            "full_name": token.user.full_name or ""
+        }
+
+        # Example: http://localhost:8501?token=xyz&username=mario
+        return RedirectResponse(f"{settings.FRONTEND_URL}?{urlencode(params)}")
+    except Exception:
+        return RedirectResponse(f"{settings.FRONTEND_URL}/error?=access_denied")
 # --- Utility ---
 
 @router.get("/me", response_model=User)

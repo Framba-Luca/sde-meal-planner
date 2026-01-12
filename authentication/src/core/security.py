@@ -15,20 +15,39 @@ def get_password_hash(password: str) -> str:
     """Generate the hashing of password."""
     return pwd_context.hash(password)
 
-def create_access_token(subject: Union[str, Any], extra_claims: dict = None) -> str:
+def create_token(subject: Union[str, Any], token_type: str, expires_delta: timedelta = None) -> str:
     """
     Create a JWT Token.
     :param subject: usually username (the 'sub' claim standard)
-    :param extra_claims: Extra data (es. full_name, role)
+    :param token_type: "access" or "refresh"
+    :param expires_delta: custom expiration time
     """
-    if extra_claims is None:
-        extra_claims = {}
-        
-    expire = datetime.now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    # Construct the payload
-    to_encode = extra_claims.copy()
-    to_encode.update({"exp": expire, "sub": str(subject)})
-    
+    expire = datetime.now() + expires_delta
+    to_encode = {
+        "exp": expire,
+        "sub": str(subject),
+        "type": token_type
+    }
+
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+def create_access_token(subject: Union[str, Any]) -> str:
+    """
+    Create the access JWT Token.
+    """
+    return create_token(
+        subject, 
+        "access", 
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
+def create_refresh_token(subject: Union[str, Any]) -> str:
+    """
+    Create the refresh JWT Token.
+    """
+    return create_token(
+        subject, 
+        "refresh", 
+        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    )
