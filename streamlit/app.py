@@ -24,18 +24,23 @@ st.set_page_config(
 
 
 # Helper functions
-def make_request(url, method="GET", data=None):
+def make_request(url, method="GET", data=None, use_form_data=False):
     """Make HTTP request to a service"""
     headers = {}
 
     if st.session_state.autheticated and st.session_state.token:
         headers["Authorization"] = f"Bearer {st.session_state.token}"
 
+    assert not use_form_data or method == "POST", "use_form_data is only valid for POST requests"
+
     try:
         if method == "GET":
             response = requests.get(url)
         elif method == "POST":
-            response = requests.post(url, json=data)
+            if use_form_data:
+                response = requests.post(url, data=data)
+            else:
+                response = requests.post(url, json=data)
         elif method == "PUT":
             response = requests.put(url, json=data)
         elif method == "DELETE":
@@ -96,7 +101,7 @@ def login_page():
         
         if st.button("Login"):
             data = {"username": username, "password": password}
-            result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/login", method="POST", data=data)
+            result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/login", method="POST", data=data, use_form_data=True)
             
             if result:
                 st.session_state.authenticated = True
