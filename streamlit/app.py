@@ -28,7 +28,7 @@ def make_request(url, method="GET", data=None, use_form_data=False):
     """Make HTTP request to a service"""
     headers = {}
 
-    if st.session_state.autheticated and st.session_state.token:
+    if st.session_state.authenticated and st.session_state.token:
         headers["Authorization"] = f"Bearer {st.session_state.token}"
 
     assert not use_form_data or method == "POST", "use_form_data is only valid for POST requests"
