@@ -19,6 +19,22 @@ services:
     networks:
       - meal-planner-network
 
+  # Redis Cache
+  redis:
+    image: redis:alpine
+    container_name: meal-planner-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - meal-planner-network
+
   # Authentication Service
   authentication:
     build: ./authentication
@@ -52,8 +68,12 @@ services:
       DB_NAME: mealplanner
       DB_USER: mealplanner
       DB_PASSWORD: mealplanner
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - meal-planner-network
@@ -129,6 +149,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   meal-planner-network:
