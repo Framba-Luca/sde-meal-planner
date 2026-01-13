@@ -74,6 +74,21 @@ def init_tables():
         with db_adapter.get_cursor() as cur:
             for query in SCHEMA_QUERIES:
                 cur.execute(query)
+            
+            # Migration: Add missing columns if they don't exist
+            # This handles cases where tables were created with older schemas
+            migration_queries = [
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(100)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE"
+            ]
+            for query in migration_queries:
+                try:
+                    cur.execute(query)
+                except Exception as e:
+                    # Column might already exist or other issue, log but continue
+                    print(f"Migration query note: {e}")
+                    
         print("Database tables initialized successfully.")
     except Exception as e:
         print(f"Error initializing tables: {e}")
