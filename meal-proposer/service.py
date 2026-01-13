@@ -151,9 +151,9 @@ class MealProposerService:
         for i in range(1, 21):  # TheMealDB supports up to 20 ingredients
             ingredient_key = f"strIngredient{i}"
             measure_key = f"strMeasure{i}"
-            
-            ingredient = recipe.get(ingredient_key, "").strip()
-            measure = recipe.get(measure_key, "").strip()
+
+            ingredient = (recipe.get(ingredient_key) or "").strip()
+            measure = (recipe.get(measure_key) or "").strip()
             
             if ingredient:
                 ingredients.append({
@@ -180,7 +180,7 @@ class MealProposerService:
             "area": recipe.get("strArea"),
             "instructions": recipe.get("strInstructions"),
             "image": recipe.get("strMealThumb"),
-            "tags": recipe.get("strTags", ""),
-            "youtube": recipe.get("strYoutube", ""),
+            "tags": recipe.get("strTags") or "",
+            "youtube": recipe.get("strYoutube") or "",
             "ingredients": self.parse_recipe_ingredients(recipe)
         }
