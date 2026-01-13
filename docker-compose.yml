@@ -70,6 +70,7 @@ services:
       DB_PASSWORD: mealplanner
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      INTERNAL_SERVICE_SECRET: internal-service-secret-key
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,6 +97,7 @@ services:
     environment:
       MEAL_PROPOSER_URL: http://meal-proposer:8003
       DATABASE_SERVICE_URL: http://database-service:8002
+      INTERNAL_SERVICE_SECRET: internal-service-secret-key
     depends_on:
       - meal-proposer
       - database-service

@@ -2,6 +2,7 @@ from typing import Annotated, Optional, Dict, Any
 from fastapi import Header, HTTPException, status, Depends
 from jose import jwt, JWTError
 import redis
+import os
 
 from src.core.config import settings
 from src.schemas.token import TokenCheckResponse
@@ -56,4 +57,40 @@ async def verify_token(authorization: Annotated[str, Header()] = None) -> Dict[s
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token"
+        )
+
+async def verify_internal_service_token(authorization: Annotated[str, Header()] = None) -> Dict[str, Any]:
+    """
+    Dependency to protect routes for internal service-to-service communication.
+    Uses a shared secret key for authentication.
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization Header"
+        )
+    
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != 'bearer':
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Auth Scheme"
+            )
+        
+        # Verify the token matches the internal service secret
+        internal_service_secret = os.getenv("INTERNAL_SERVICE_SECRET", "internal-service-secret-key")
+        
+        if token != internal_service_secret:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid internal service token"
+            )
+        
+        return {"service": "internal", "authenticated": True}
+        
+    except (ValueError, IndexError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format"
         )

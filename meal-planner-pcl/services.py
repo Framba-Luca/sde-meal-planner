@@ -9,6 +9,7 @@ import os
 # Service URLs
 MEAL_PROPOSER_URL = os.getenv("MEAL_PROPOSER_URL", "http://meal-proposer:8003")
 DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://database-service:8002")
+INTERNAL_SERVICE_SECRET = os.getenv("INTERNAL_SERVICE_SECRET", "internal-service-secret-key")
 
 
 class MealPlannerService:
@@ -18,17 +19,22 @@ class MealPlannerService:
         self.meal_proposer_url = MEAL_PROPOSER_URL
         self.database_service_url = DATABASE_SERVICE_URL
     
-    def _make_request(self, url: str, method: str = "GET", data: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
+    def _make_request(self, url: str, method: str = "GET", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
         """Make an HTTP request to another service"""
         try:
+            # Add internal service authentication header
+            if headers is None:
+                headers = {}
+            headers["Authorization"] = f"Bearer {INTERNAL_SERVICE_SECRET}"
+            
             if method == "GET":
-                response = requests.get(url)
+                response = requests.get(url, headers=headers)
             elif method == "POST":
-                response = requests.post(url, json=data)
+                response = requests.post(url, json=data, headers=headers)
             elif method == "PUT":
-                response = requests.put(url, json=data)
+                response = requests.put(url, json=data, headers=headers)
             elif method == "DELETE":
-                response = requests.delete(url)
+                response = requests.delete(url, headers=headers)
             else:
                 return None
             
@@ -66,7 +72,7 @@ class MealPlannerService:
         Returns:
             Created meal plan or None if failed
         """
-        url = f"{self.database_service_url}/meal-plans"
+        url = f"{self.database_service_url}/api/v1/meal-plans/"
         data = {
             "user_id": user_id,
             "start_date": start_date.isoformat(),
@@ -89,7 +95,7 @@ class MealPlannerService:
         Returns:
             Created meal plan item or None if failed
         """
-        url = f"{self.database_service_url}/meal-plan-items"
+        url = f"{self.database_service_url}/api/v1/meal-plans/items/"
         data = {
             "meal_plan_id": meal_plan_id,
             "mealdb_id": mealdb_id,
@@ -169,7 +175,7 @@ class MealPlannerService:
         Returns:
             Meal plan details or None if not found
         """
-        url = f"{self.database_service_url}/meal-plans/{meal_plan_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/{meal_plan_id}"
         result = self._make_request(url, method="GET")
         return result
     
@@ -183,7 +189,7 @@ class MealPlannerService:
         Returns:
             List of meal plan items or None if failed
         """
-        url = f"{self.database_service_url}/meal-plan-items/{meal_plan_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/items/{meal_plan_id}"
         result = self._make_request(url, method="GET")
         return result
     
@@ -197,7 +203,7 @@ class MealPlannerService:
         Returns:
             List of meal plans or None if failed
         """
-        url = f"{self.database_service_url}/meal-plans/user/{user_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/user/{user_id}"
         result = self._make_request(url, method="GET")
         return result
     
@@ -211,7 +217,7 @@ class MealPlannerService:
         Returns:
             True if successful, False otherwise
         """
-        url = f"{self.database_service_url}/meal-plans/{meal_plan_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/{meal_plan_id}"
         result = self._make_request(url, method="DELETE")
         return result is not None
     
@@ -227,7 +233,7 @@ class MealPlannerService:
         Returns:
             True if successful, False otherwise
         """
-        url = f"{self.database_service_url}/meal-plan-items/{item_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/items/{item_id}"
         data = {}
         if mealdb_id is not None:
             data["mealdb_id"] = mealdb_id
@@ -250,6 +256,6 @@ class MealPlannerService:
         Returns:
             True if successful, False otherwise
         """
-        url = f"{self.database_service_url}/meal-plan-items/{item_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/items/{item_id}"
         result = self._make_request(url, method="DELETE")
         return result is not None

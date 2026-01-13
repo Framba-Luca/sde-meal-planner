@@ -94,6 +94,8 @@ def initialize_session_state():
         st.session_state.token = None
     if "user" not in st.session_state:
         st.session_state.user = None
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
 
     # Case A: We have a saved cookie -> Autologin
     if cookie_token and not st.session_state.authenticated:
@@ -128,6 +130,9 @@ def initialize_session_state():
         }
         st.session_state.authenticated = True
         
+        # Fetch user ID from database service
+        fetch_user_id(username)
+        
         # --- Save in the Cookie ---
         cookie_manager.set("access_token", token, key="google_auth_token")
         # -----------------------------------------------
@@ -142,6 +147,17 @@ def initialize_session_state():
         st.rerun()
 
 # Authentication functions
+def fetch_user_id(username):
+    """Fetch user ID from database service"""
+    try:
+        result = make_request(f"{DATABASE_SERVICE_URL}/api/v1/users/username/{username}")
+        if result and "id" in result:
+            st.session_state.user_id = result["id"]
+            return True
+    except Exception as e:
+        st.error(f"Error fetching user ID: {e}")
+    return False
+
 def login_page():
     """Display login page"""
     st.title("🍽️ Meal Planner")
@@ -167,6 +183,8 @@ def login_page():
                     st.session_state.authenticated = True
                     st.session_state.token = result["access_token"]
                     st.session_state.user = result["user"]
+                    # Fetch user ID from database service
+                    fetch_user_id(username)
                     st.success("Login successful!")
 
                     cookie_manager.set("access_token", result["access_token"], key="login_token")
@@ -228,6 +246,7 @@ def logout():
     cookie_manager.delete("access_token")
     st.session_state.authenticated = False
     st.session_state.user = None
+    st.session_state.user_id = None
     st.session_state.token = None
     st.rerun()
 
@@ -286,13 +305,16 @@ def meal_planning_page():
         ingredient = st.text_input("Ingredient (optional)")
         
         if st.button("Generate Meal Plan"):
-            data = {
-                "user_id": st.session_state.user["username"],
-                "num_days": num_days,
-                "start_date": start_date.isoformat(),
-                "ingredient": ingredient if ingredient else None
-            }
-            result = make_request(f"{MEAL_PLANNER_URL}/meal-plans/generate", method="POST", data=data)
+            if not st.session_state.user_id:
+                st.error("User ID not found. Please login again.")
+            else:
+                data = {
+                    "user_id": st.session_state.user_id,
+                    "num_days": num_days,
+                    "start_date": start_date.isoformat(),
+                    "ingredient": ingredient if ingredient else None
+                }
+                result = make_request(f"{MEAL_PLANNER_URL}/meal-plans/generate", method="POST", data=data)
             
             if result:
                 st.session_state.current_meal_plan = result
@@ -344,7 +366,10 @@ def recipe_interaction_page():
     
     with tab1:
         # View user's custom recipes
-        result = make_request(f"{RECIPE_CRUD_URL}/recipes/user/{st.session_state.user['username']}")
+        if not st.session_state.user_id:
+            st.error("User ID not found. Please login again.")
+        else:
+            result = make_request(f"{RECIPE_CRUD_URL}/recipes/user/{st.session_state.user_id}")
         
         if result:
             recipes = result
@@ -376,15 +401,18 @@ def recipe_interaction_page():
             if not name:
                 st.error("Recipe name is required")
             else:
-                data = {
-                    "user_id": st.session_state.user["username"],
-                    "name": name,
-                    "category": category,
-                    "area": area,
-                    "instructions": instructions,
-                    "image": image,
-                    "tags": tags
-                }
+                if not st.session_state.user_id:
+                    st.error("User ID not found. Please login again.")
+                else:
+                    data = {
+                        "user_id": st.session_state.user_id,
+                        "name": name,
+                        "category": category,
+                        "area": area,
+                        "instructions": instructions,
+                        "image": image,
+                        "tags": tags
+                    }
                 
                 result = make_request(f"{RECIPE_CRUD_URL}/recipes", method="POST", data=data)
                 
@@ -466,7 +494,10 @@ def my_meal_plans_page():
     """View user's meal plans"""
     st.header("📋 My Meal Plans")
     
-    result = make_request(f"{MEAL_PLANNER_URL}/meal-plans/user/{st.session_state.user['username']}")
+    if not st.session_state.user_id:
+        st.error("User ID not found. Please login again.")
+    else:
+        result = make_request(f"{MEAL_PLANNER_URL}/meal-plans/user/{st.session_state.user_id}")
     
     if result and result["meal_plans"]:
         for plan in result["meal_plans"]:

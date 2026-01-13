@@ -2,7 +2,7 @@ from typing import List, Dict
 from fastapi import APIRouter, HTTPException, status, Depends
 from src.schemas.meal import MealPlanCreate, MealPlanResponse, MealPlanItemCreate, MealPlanItemResponse
 from src.services.meal_service import MealService
-from src.api.deps import verify_token
+from src.api.deps import verify_token, verify_internal_service_token
 
 router = APIRouter()
 meal_service = MealService()
@@ -10,7 +10,7 @@ meal_service = MealService()
 @router.post("/", response_model=MealPlanResponse, status_code=status.HTTP_201_CREATED)
 async def create_meal_plan(
     plan: MealPlanCreate,
-    token_payload: Dict = Depends(verify_token) # <--- Rotta Protetta
+    token_payload: Dict = Depends(verify_internal_service_token) # <--- Internal Service Auth
 ):
     """Create a new meal plan."""
     plan_id = meal_service.create_meal_plan(plan)
@@ -30,7 +30,7 @@ async def create_meal_plan(
 @router.get("/user/{user_id}", response_model=List[MealPlanResponse])
 async def get_meal_plans_by_user(
     user_id: int,
-    token_payload: Dict = Depends(verify_token)
+    token_payload: Dict = Depends(verify_internal_service_token)
 ):
     """Get all meal plans for a specific user."""
     results = meal_service.get_meal_plans_by_user(user_id)
@@ -39,7 +39,7 @@ async def get_meal_plans_by_user(
 @router.post("/items/", response_model=MealPlanItemResponse, status_code=status.HTTP_201_CREATED)
 async def add_meal_item(
     item: MealPlanItemCreate,
-    token_payload: Dict = Depends(verify_token)
+    token_payload: Dict = Depends(verify_internal_service_token)
 ):
     """Add a meal item (recipe) to a plan."""
     item_id = meal_service.add_meal_item(item)
