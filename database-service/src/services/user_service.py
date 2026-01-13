@@ -9,6 +9,12 @@ class UserService:
             cur.execute(query, (username,))
             return cur.fetchone()
 
+    def get_users(self, skip: int = 0, limit: int = 100) -> list:
+        query = "SELECT * FROM users ORDER BY id OFFSET %s LIMIT %s"
+        with db_adapter.get_cursor() as cur:
+            cur.execute(query, (skip, limit))
+            return cur.fetchall()
+
     def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
         query = "SELECT * FROM users WHERE id = %s"
         with db_adapter.get_cursor() as cur:

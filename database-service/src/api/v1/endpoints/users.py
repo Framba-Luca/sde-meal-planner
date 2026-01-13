@@ -45,6 +45,14 @@ async def get_user_by_username(username: str):
         )
     return user
 
+@router.get("/", response_model=list[UserResponse])
+async def get_users(skip: int = 0, limit: int = 100):
+    """Retrieve a list of users with pagination."""
+    users = user_service.get_users(skip=skip, limit=limit)
+    for user in users:
+        user['created_at'] = str(user['created_at'])
+    return users
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user_by_id(user_id: int):
     """Retrieve user profile by ID."""
