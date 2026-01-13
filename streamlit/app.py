@@ -110,8 +110,8 @@ def initialize_session_state():
     except AttributeError:
         query_params = st.experimental_get_query_params()
 
-    if "token" in query_params:
-        val = query_params["token"]
+    if "access_token" in query_params:
+        val = query_params["access_token"]
         token = val[0] if isinstance(val, list) else val
         
         user_val = query_params.get("username", "User")

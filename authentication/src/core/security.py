@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Union
+from typing import Any, Union, Optional, Dict
 from jose import jwt
 from passlib.context import CryptContext
 from src.core.config import settings
@@ -15,14 +15,18 @@ def get_password_hash(password: str) -> str:
     """Generate the hashing of password."""
     return pwd_context.hash(password)
 
-def create_token(subject: Union[str, Any], token_type: str, expires_delta: timedelta = None) -> str:
+def create_token(subject: Union[str, Any], token_type: str, expires_delta: timedelta = None, extra_claims: dict = None) -> str:
     """
     Create a JWT Token.
     :param subject: usually username (the 'sub' claim standard)
     :param token_type: "access" or "refresh"
     :param expires_delta: custom expiration time
     """
-    expire = datetime.now() + expires_delta
+    if expires_delta:
+        expire = datetime.now() + expires_delta
+    else:
+        expire = datetime.now() + timedelta(minutes=15)
+    
     to_encode = {
         "exp": expire,
         "sub": str(subject),
@@ -32,14 +36,15 @@ def create_token(subject: Union[str, Any], token_type: str, expires_delta: timed
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-def create_access_token(subject: Union[str, Any]) -> str:
+def create_access_token(subject: Union[str, Any], extra_claims: Optional[Dict[str, Any]] = None) -> str:
     """
     Create the access JWT Token.
     """
     return create_token(
         subject, 
         "access", 
-        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        extra_claims=extra_claims
     )
 
 def create_refresh_token(subject: Union[str, Any]) -> str:

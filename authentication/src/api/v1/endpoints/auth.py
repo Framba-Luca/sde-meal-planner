@@ -3,6 +3,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 from typing import Annotated
+import traceback
+import sys
 
 from src.services.auth_service import AuthService
 from src.services.oauth_service import GoogleAuthService
@@ -79,7 +81,11 @@ async def google_callback(
     Redirect to frontend with token.
     """
     try:
+        print(f"DEBUG: Ricevuto codice da Google: {code[:10]}...") # Log di debug
+        
         token = await service.callback_handler(code)
+        
+        print(f"DEBUG: Token generato con successo per user: {token.user.username}") # Log di debug
 
         # URL frontend redirection with token params
         params = {
@@ -89,12 +95,12 @@ async def google_callback(
             "full_name": token.user.full_name or ""
         }
 
-        # Example: http://localhost:8501?token=xyz&username=mario
         return RedirectResponse(f"{settings.FRONTEND_URL}?{urlencode(params)}")
-    except Exception:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/error?=access_denied")
-# --- Utility ---
+        
+    except Exception as e:
+        return RedirectResponse(f"{settings.FRONTEND_URL}?error=access_denied")
 
+# --- Utility ---
 @router.get("/me", response_model=User)
 def read_users_me(current_user: User = Depends(deps.get_current_user)):
     """
