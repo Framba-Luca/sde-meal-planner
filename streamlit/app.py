@@ -388,20 +388,46 @@ def recipe_interaction_page():
         else:
             result = make_request(f"{RECIPE_CRUD_URL}/recipes/user/{st.session_state.user_id}")
         
-        if result:
+        if result is not None:
             recipes = result
-            if recipes:
+            if recipes and len(recipes) > 0:
                 for recipe in recipes:
                     with st.expander(f"{recipe['name']}"):
-                        st.write(f"**Category:** {recipe['category']}")
-                        st.write(f"**Area:** {recipe['area']}")
-                        st.write(f"**Tags:** {recipe['tags']}")
-                        st.write("**Instructions:**")
-                        st.write(recipe['instructions'])
+                        col1, col2 = st.columns([3, 1])
+                        
+                        with col1:
+                            st.write(f"**Category:** {recipe.get('category', 'N/A')}")
+                            st.write(f"**Area:** {recipe.get('area', 'N/A')}")
+                            st.write(f"**Tags:** {recipe.get('tags', 'N/A')}")
+                            st.write("**Instructions:**")
+                            instructions = recipe.get('instructions', 'No instructions provided')
+                            if instructions:
+                                st.write(instructions)
+                            else:
+                                st.write("No instructions provided")
+                        
+                        with col2:
+                            if st.button("🗑️ Delete", key=f"delete_{recipe['id']}", type="secondary"):
+                                delete_result = make_request(
+                                    f"{RECIPE_CRUD_URL}/recipes/{recipe['id']}",
+                                    method="DELETE"
+                                )
+                                if delete_result:
+                                    st.success("Recipe deleted successfully!")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to delete recipe")
             else:
-                st.info("No custom recipes found. Add your first recipe!")
+                st.info("🍽️ **No custom recipes found!**")
+                st.write("Start by adding your first recipe in the 'Add Recipe' tab above.")
+                st.write("You can create recipes with:")
+                st.write("- Recipe name (required)")
+                st.write("- Category and cuisine area")
+                st.write("- Detailed instructions")
+                st.write("- Image URL")
+                st.write("- Tags for easy searching")
         else:
-            st.error("Failed to fetch recipes")
+            st.error("❌ Failed to fetch recipes. Please try again later.")
     
     with tab2:
         # Add new recipe
