@@ -3,7 +3,7 @@ Recipe CRUD Interaction Service - REST API endpoints
 """
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from services import RecipeCRUDService
 
 app = FastAPI(title="Recipe CRUD Interaction Service", version="1.0.0")
@@ -16,11 +16,12 @@ recipe_crud = RecipeCRUDService()
 class RecipeCreate(BaseModel):
     user_id: int
     name: str
-    category: Optional[str] = ""
-    area: Optional[str] = ""
-    instructions: Optional[str] = ""
-    image: Optional[str] = ""
-    tags: Optional[str] = ""
+    category: Optional[str] = None
+    area: Optional[str] = None
+    instructions: Optional[str] = None
+    image: Optional[str] = None
+    tags: Optional[str] = None
+    ingredients: List[Dict[str, Any]] = []
 
 
 class RecipeUpdate(BaseModel):
@@ -30,17 +31,19 @@ class RecipeUpdate(BaseModel):
     instructions: Optional[str] = None
     image: Optional[str] = None
     tags: Optional[str] = None
+    ingredients: Optional[List[Dict[str, Any]]] = None
 
 
 class RecipeResponse(BaseModel):
     id: int
     user_id: int
     name: str
-    category: str
-    area: str
-    instructions: str
-    image: str
-    tags: str
+    category: Optional[str] = None
+    area: Optional[str] = None
+    instructions: Optional[str] = None
+    image: Optional[str] = None
+    tags: Optional[str] = None
+    ingredients: List[Dict[str, Any]] = []
     created_at: str
 
 

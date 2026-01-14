@@ -7,6 +7,7 @@ import os
 
 # Service URLs
 DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://database-service:8002")
+INTERNAL_SERVICE_SECRET = os.getenv("INTERNAL_SERVICE_SECRET", "internal-service-secret-key")
 
 
 class RecipeCRUDService:
@@ -14,18 +15,23 @@ class RecipeCRUDService:
     
     def __init__(self):
         self.database_service_url = DATABASE_SERVICE_URL
+        self.internal_service_secret = INTERNAL_SERVICE_SECRET
     
     def _make_request(self, url: str, method: str = "GET", data: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
         """Make an HTTP request to the database service"""
+        headers = {
+            "Authorization": f"Bearer {self.internal_service_secret}"
+        }
+        
         try:
             if method == "GET":
-                response = requests.get(url)
+                response = requests.get(url, headers=headers)
             elif method == "POST":
-                response = requests.post(url, json=data)
+                response = requests.post(url, json=data, headers=headers)
             elif method == "PUT":
-                response = requests.put(url, json=data)
+                response = requests.put(url, json=data, headers=headers)
             elif method == "DELETE":
-                response = requests.delete(url)
+                response = requests.delete(url, headers=headers)
             else:
                 return None
             
@@ -46,7 +52,7 @@ class RecipeCRUDService:
         Returns:
             Created recipe or None if failed
         """
-        url = f"{self.database_service_url}/custom-recipes"
+        url = f"{self.database_service_url}/api/v1/custom-recipes"
         data = {
             "user_id": user_id,
             **recipe_data
@@ -65,7 +71,7 @@ class RecipeCRUDService:
         Returns:
             Recipe details or None if not found
         """
-        url = f"{self.database_service_url}/custom-recipes/{recipe_id}"
+        url = f"{self.database_service_url}/api/v1/custom-recipes/{recipe_id}"
         result = self._make_request(url, method="GET")
         return result
     
@@ -79,7 +85,7 @@ class RecipeCRUDService:
         Returns:
             List of recipes or None if failed
         """
-        url = f"{self.database_service_url}/custom-recipes/user/{user_id}"
+        url = f"{self.database_service_url}/api/v1/custom-recipes/user/{user_id}"
         result = self._make_request(url, method="GET")
         return result
     
@@ -94,7 +100,7 @@ class RecipeCRUDService:
         Returns:
             True if successful, False otherwise
         """
-        url = f"{self.database_service_url}/custom-recipes/{recipe_id}"
+        url = f"{self.database_service_url}/api/v1/custom-recipes/{recipe_id}"
         result = self._make_request(url, method="PUT", data=recipe_data)
         return result is not None
     
@@ -108,7 +114,7 @@ class RecipeCRUDService:
         Returns:
             True if successful, False otherwise
         """
-        url = f"{self.database_service_url}/custom-recipes/{recipe_id}"
+        url = f"{self.database_service_url}/api/v1/custom-recipes/{recipe_id}"
         result = self._make_request(url, method="DELETE")
         return result is not None
     
