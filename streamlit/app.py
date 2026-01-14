@@ -131,31 +131,40 @@ def initialize_session_state():
         st.session_state.authenticated = True
         
         # Fetch user ID from database service
-        fetch_user_id(username)
+        fetched_correctly = fetch_user_id(username)
         
-        # --- Save in the Cookie ---
-        cookie_manager.set("access_token", token, key="google_auth_token")
-        # -----------------------------------------------
+        if fetched_correctly:
+            # --- Save in the Cookie ---
+            cookie_manager.set("access_token", token, key="google_auth_token")
+            # -----------------------------------------------
 
-        # Clean the URL to remove token parameters
-        try:
-            st.query_params.clear()
-        except AttributeError:
-            st.experimental_set_query_params()
-        
-        # Refresh to have the updated state
-        st.rerun()
+            # Clean the URL to remove token parameters
+            try:
+                st.query_params.clear()
+            except AttributeError:
+                st.experimental_set_query_params()
+            
+            # Refresh to have the updated state
+            st.rerun()
+        else:
+            # Clear authentication state if user ID cannot be fetched
+            st.session_state.authenticated = False
+            st.session_state.token = None
+            st.session_state.user = None
+            st.session_state.user_id = None
+            st.error("Login failed: Unable to fetch user ID. User may not exist in the database.")
 
 # Authentication functions
 def fetch_user_id(username):
-    """Fetch user ID from database service"""
-    try:
-        result = make_request(f"{DATABASE_SERVICE_URL}/api/v1/users/username/{username}")
-        if result and "id" in result:
-            st.session_state.user_id = result["id"]
-            return True
-    except Exception as e:
-        st.error(f"Error fetching user ID: {e}")
+    """Fetch user ID from database service
+    
+    Returns:
+        bool: True if user ID was fetched successfully, False otherwise
+    """
+    result = make_request(f"{DATABASE_SERVICE_URL}/api/v1/users/username/{username}")
+    if result and "id" in result:
+        st.session_state.user_id = result["id"]
+        return True
     return False
 
 def login_page():
@@ -184,11 +193,19 @@ def login_page():
                     st.session_state.token = result["access_token"]
                     st.session_state.user = result["user"]
                     # Fetch user ID from database service
-                    fetch_user_id(username)
-                    st.success("Login successful!")
-
-                    cookie_manager.set("access_token", result["access_token"], key="login_token")
-                    st.rerun()
+                    fetched_correctly = fetch_user_id(username)
+                    
+                    if fetched_correctly:
+                        st.success("Login successful!")
+                        cookie_manager.set("access_token", result["access_token"], key="login_token")
+                        st.rerun()
+                    else:
+                        # Clear authentication state if user ID cannot be fetched
+                        st.session_state.authenticated = False
+                        st.session_state.token = None
+                        st.session_state.user = None
+                        st.session_state.user_id = None
+                        st.error("Login failed: Unable to fetch user ID. User may not exist in the database.")
     
     with tab2:
         st.subheader("Create Account")
