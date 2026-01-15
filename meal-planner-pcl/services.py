@@ -259,3 +259,62 @@ class MealPlannerService:
         url = f"{self.database_service_url}/api/v1/meal-plans/items/{item_id}"
         result = self._make_request(url, method="DELETE")
         return result is not None
+    
+    def get_full_meal_plan(self, meal_plan_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a full meal plan with all recipe details
+        
+        Args:
+            meal_plan_id: ID of the meal plan
+            
+        Returns:
+            Full meal plan with recipe details or None if failed
+        """
+        # Get meal plan details
+        meal_plan = self.get_meal_plan(meal_plan_id)
+        if not meal_plan:
+            return None
+        
+        # Get meal plan items
+        items = self.get_meal_plan_items(meal_plan_id)
+        if not items:
+            return None
+        
+        # Group items by date and meal type
+        days_meals = {}
+        for item in items:
+            meal_date = item["meal_date"]
+            meal_type = item["meal_type"]
+            
+            if meal_date not in days_meals:
+                days_meals[meal_date] = {}
+            
+            # Fetch recipe details from meal proposer service
+            recipe = self._get_recipe_details(item["mealdb_id"])
+            if recipe:
+                days_meals[meal_date][meal_type] = {
+                    "recipe": recipe,
+                    "meal_plan_item_id": item["id"]
+                }
+        
+        return {
+            "meal_plan_id": meal_plan_id,
+            "user_id": meal_plan["user_id"],
+            "start_date": meal_plan["start_date"],
+            "end_date": meal_plan["end_date"],
+            "days": days_meals
+        }
+    
+    def _get_recipe_details(self, mealdb_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get recipe details from meal proposer service
+        
+        Args:
+            mealdb_id: ID of the recipe from TheMealDB
+            
+        Returns:
+            Recipe details or None if failed
+        """
+        url = f"{self.meal_proposer_url}/recipe/{mealdb_id}"
+        result = self._make_request(url, method="GET")
+        return result

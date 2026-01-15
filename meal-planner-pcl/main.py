@@ -107,6 +107,18 @@ async def get_meal_plan(meal_plan_id: int):
     )
 
 
+@app.get("/meal-plans/{meal_plan_id}/full")
+async def get_full_meal_plan(meal_plan_id: int):
+    """Get a full meal plan with all recipe details"""
+    meal_plan = meal_planner.get_full_meal_plan(meal_plan_id)
+    if meal_plan:
+        return meal_plan
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Meal plan not found"
+    )
+
+
 @app.get("/meal-plans/{meal_plan_id}/items")
 async def get_meal_plan_items(meal_plan_id: int):
     """Get all items in a meal plan"""

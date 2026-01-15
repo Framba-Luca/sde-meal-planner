@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 # --- Meal Plans ---
@@ -13,7 +13,7 @@ class MealPlanResponse(BaseModel):
     user_id: int
     start_date: date
     end_date: date
-    created_at: str | date
+    created_at: datetime
 
 # --- Meal Items ---
 class MealPlanItemCreate(BaseModel):
@@ -21,6 +21,10 @@ class MealPlanItemCreate(BaseModel):
     mealdb_id: int
     meal_date: date
     meal_type: str
+
+class MealPlanItemUpdate(BaseModel):
+    mealdb_id: Optional[int] = None
+    meal_type: Optional[str] = None
 
 class MealPlanItemResponse(MealPlanItemCreate):
     id: int

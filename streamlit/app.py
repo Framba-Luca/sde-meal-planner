@@ -265,6 +265,9 @@ def logout():
     st.session_state.user = None
     st.session_state.user_id = None
     st.session_state.token = None
+    # Clear meal plan from session state
+    if "current_meal_plan" in st.session_state:
+        del st.session_state.current_meal_plan
     st.rerun()
 
 
@@ -335,7 +338,7 @@ def meal_planning_page():
             
             if result:
                 st.session_state.current_meal_plan = result
-                st.success("Meal plan generated successfully!")
+                st.success("Meal plan generated and saved successfully!")
             else:
                 st.error("Failed to generate meal plan")
     
@@ -344,6 +347,9 @@ def meal_planning_page():
             meal_plan = st.session_state.current_meal_plan
             
             st.subheader(f"Meal Plan: {meal_plan['start_date']} to {meal_plan['end_date']}")
+            
+            # Show save confirmation
+            st.info(f"💾 This meal plan is saved in the database (Plan ID: {meal_plan['meal_plan_id']})")
             
             for day_date, meals in meal_plan["days"].items():
                 st.write(f"### 📆 {day_date}")
@@ -555,10 +561,23 @@ def my_meal_plans_page():
                     for item in items["items"]:
                         st.write(f"- {item['meal_date']}: {item['meal_type']} (Recipe ID: {item['mealdb_id']})")
                 
-                if st.button(f"Delete Plan {plan['id']}", key=f"delete_{plan['id']}"):
-                    make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan['id']}", method="DELETE")
-                    st.success("Meal plan deleted!")
-                    st.rerun()
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"📂 Load Plan {plan['id']}", key=f"load_{plan['id']}", type="primary"):
+                        # Load full meal plan with recipe details
+                        full_plan = make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan['id']}/full")
+                        if full_plan:
+                            st.session_state.current_meal_plan = full_plan
+                            st.success("Meal plan loaded successfully!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to load meal plan")
+                
+                with col2:
+                    if st.button(f"🗑️ Delete Plan {plan['id']}", key=f"delete_{plan['id']}", type="secondary"):
+                        make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan['id']}", method="DELETE")
+                        st.success("Meal plan deleted!")
+                        st.rerun()
     else:
         st.info("No meal plans found. Create your first meal plan!")
 
