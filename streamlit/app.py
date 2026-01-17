@@ -473,71 +473,84 @@ def recipe_interaction_page():
 
 
 def recipe_search_page():
-    """Recipe search page"""
+    """Recipe search page with Review System integration"""
     st.header("🔍 Recipe Search")
     
     search_type = st.selectbox("Search By", ["Name", "Ingredient", "Category", "Area"])
     
+    search_results = None
+
     if search_type == "Name":
         search_term = st.text_input("Recipe Name")
-        if st.button("Search"):
-            result = make_request(f"{RECIPES_FETCH_URL}/search/name/{search_term}")
-            if result and result["meals"]:
-                for meal in result["meals"]:
-                    st.write(f"### {meal['strMeal']}")
-                    st.write(f"Category: {meal['strCategory']}, Area: {meal['strArea']}")
-                    if meal['strMealThumb']:
-                        st.image(meal['strMealThumb'], width=200)
-            else:
-                st.info("No recipes found")
+        if st.button("Search") and search_term:
+            search_results = make_request(f"{RECIPES_FETCH_URL}/search/name/{search_term}")
     
     elif search_type == "Ingredient":
         search_term = st.text_input("Ingredient")
-        if st.button("Search"):
-            result = make_request(f"{RECIPES_FETCH_URL}/filter/ingredient/{search_term}")
-            if result and result["meals"]:
-                for meal in result["meals"]:
-                    st.write(f"### {meal['strMeal']}")
-                    st.write(f"Category: {meal['strCategory']}, Area: {meal['strArea']}")
-                    if meal['strMealThumb']:
-                        st.image(meal['strMealThumb'], width=200)
-            else:
-                st.info("No recipes found")
-    
+        if st.button("Search") and search_term:
+            search_results = make_request(f"{RECIPES_FETCH_URL}/filter/ingredient/{search_term}")
+
     elif search_type == "Category":
         categories = make_request(f"{RECIPES_FETCH_URL}/categories")
-        if categories:
-            category_names = [cat["strCategory"] for cat in categories["categories"]]
-            selected_category = st.selectbox("Select Category", category_names)
-            
+        if categories and "categories" in categories:
+            cat_list = [c['strCategory'] for c in categories['categories']]
+            selected_cat = st.selectbox("Select Category", cat_list)
             if st.button("Search"):
-                result = make_request(f"{RECIPES_FETCH_URL}/filter/category/{selected_category}")
-                if result and result["meals"]:
-                    for meal in result["meals"]:
-                        st.write(f"### {meal['strMeal']}")
-                        st.write(f"Category: {meal['strCategory']}, Area: {meal['strArea']}")
-                        if meal['strMealThumb']:
-                            st.image(meal['strMealThumb'], width=200)
-                else:
-                    st.info("No recipes found")
-    
+                search_results = make_request(f"{RECIPES_FETCH_URL}/filter/category/{selected_cat}")
+
     elif search_type == "Area":
         areas = make_request(f"{RECIPES_FETCH_URL}/areas")
-        if areas:
-            area_names = [area["strArea"] for area in areas["areas"]]
-            selected_area = st.selectbox("Select Area", area_names)
-            
+        if areas and "areas" in areas:
+            area_list = [a['strArea'] for a in areas['areas']]
+            selected_area = st.selectbox("Select Area", area_list)
             if st.button("Search"):
-                result = make_request(f"{RECIPES_FETCH_URL}/filter/area/{selected_area}")
-                if result and result["meals"]:
-                    for meal in result["meals"]:
-                        st.write(f"### {meal['strMeal']}")
-                        st.write(f"Category: {meal['strCategory']}, Area: {meal['strArea']}")
-                        if meal['strMealThumb']:
-                            st.image(meal['strMealThumb'], width=200)
-                else:
-                    st.info("No recipes found")
+                search_results = make_request(f"{RECIPES_FETCH_URL}/filter/area/{selected_area}")
 
+    if search_results and "meals" in search_results and search_results["meals"]:
+        st.write(f"Found {len(search_results['meals'])} recipes:")
+        
+        for meal in search_results["meals"]:
+            external_id = meal.get('idMeal')
+            recipe_name = meal.get('strMeal')
+            
+            with st.expander(f"🍽️ {recipe_name}"):
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    if meal.get('strMealThumb'):
+                        st.image(meal['strMealThumb'], use_column_width=True)
+                    else:
+                        st.write("No Image")
+                
+                with col2:
+                    st.write(f"**Category:** {meal.get('strCategory', 'N/A')}")
+                    st.write(f"**Area:** {meal.get('strArea', 'N/A')}")
+                    
+                    if meal.get('strInstructions'):
+                        st.markdown("**Instructions:**")
+                        instr = meal['strInstructions']
+                        if len(instr) > 300:
+                            st.write(instr[:300] + "...")
+                        else:
+                            st.write(instr)
+                    
+                    if meal.get('strYoutube'):
+                        st.markdown(f"[Watch on YouTube]({meal['strYoutube']})")
+
+                # ============================================================
+                # REVIEW SYSTEM INTEGRATION
+                # ============================================================
+                # We pass the external_id. The backend will automatically handle 
+                # the creation of the Shadow Recipe upon the first save.
+                render_reviews_ui(
+                    recipe_id=None,
+                    external_id=external_id,
+                    recipe_name=recipe_name
+                )
+                # ============================================================
+
+    elif search_results is not None:
+        st.warning("No recipes found matching your criteria.")
 
 def my_meal_plans_page():
     """View user's meal plans"""
@@ -581,6 +594,77 @@ def my_meal_plans_page():
     else:
         st.info("No meal plans found. Create your first meal plan!")
 
+def render_reviews_ui(recipe_id=None, external_id=None, recipe_name="Recipe"):
+    """
+    Reusable UI component for reviews.
+    Handles display, creation, and deletion.
+    """
+    st.markdown("---")
+    st.subheader(f"⭐ Reviews for {recipe_name}")
+
+    # 1. Fetch Existing Reviews
+    reviews = []
+    if recipe_id:
+        try:
+            reviews = make_request(f"{RECIPE_CRUD_URL}/reviews/{recipe_id}", method="GET")
+        except:
+            reviews = []
+
+    # Calculate Average Rating
+    if reviews:
+        avg_rating = sum(r['rating'] for r in reviews) / len(reviews)
+        st.markdown(f"**Average Rating:** {avg_rating:.1f}/5 ({len(reviews)} reviews)")
+    else:
+        st.info("No reviews yet. Be the first!")
+
+    # 2. New Review Form
+    # FIX: Usiamo un Checkbox invece di Expander per evitare l'errore di nesting
+    if st.checkbox("✍️ Write a review", key=f"toggle_rev_{recipe_id}_{external_id}"):
+        with st.form(key=f"review_form_{recipe_id}_{external_id}"):
+            rating = st.slider("Your rating", 1, 5, 5)
+            comment = st.text_area("Your comment")
+            submit_review = st.form_submit_button("Submit Review")
+
+            if submit_review:
+                payload = {
+                    "rating": rating,
+                    "comment": comment,
+                    "recipe_id": recipe_id, 
+                    "external_id": external_id
+                }
+                
+                resp = make_request(
+                    f"{RECIPE_CRUD_URL}/reviews/", 
+                    method="POST", 
+                    data=payload
+                )
+                
+                if resp:
+                    st.success("Review saved!")
+                    st.rerun()
+
+    # 3. List of Reviews
+    if reviews:
+        st.write("---")
+        for review in reviews:
+            with st.container():
+                col1, col2 = st.columns([0.8, 0.2])
+                with col1:
+                    stars = "⭐" * review['rating']
+                    author = review.get('username', f"User {review['user_id']}")
+                    st.markdown(f"**{author}** - {stars}")
+                
+                with col2:
+                    # Delete Button (Only if I am the author)
+                    if str(review['user_id']) == str(st.session_state.user['id']):
+                        if st.button("🗑️", key=f"del_rev_{review['id']}", help="Delete your review"):
+                            make_request(f"{RECIPE_CRUD_URL}/reviews/{review['id']}", method="DELETE")
+                            st.success("Deleted!")
+                            st.rerun()
+                
+                st.write(review['comment'])
+                st.caption(f"Published on: {review.get('created_at', '')}")
+                st.divider()
 
 # Main application
 def main():

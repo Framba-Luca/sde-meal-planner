@@ -14,3 +14,10 @@ class CustomRecipeCreate(BaseModel):
 class CustomRecipeResponse(CustomRecipeCreate):
     id: int
     created_at: str | Any
+
+class ShadowRecipeCreate(BaseModel):
+    external_id: str
+    name: str
+    image: str
+    category: Optional[str] = None
+    area: Optional[str] = None

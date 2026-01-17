@@ -1,6 +1,6 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
-from src.schemas.recipe import CustomRecipeCreate, CustomRecipeResponse
+from src.schemas.recipe import CustomRecipeCreate, CustomRecipeResponse, ShadowRecipeCreate
 from src.services.recipe_service import RecipeService
 from src.api.deps import verify_internal_service_token
 
@@ -64,3 +64,28 @@ async def delete_custom_recipe(
     if success:
         return {"status": "success", "message": "Recipe deleted"}
     raise HTTPException(status_code=404, detail="Recipe not found")
+
+@router.get("/external/{external_id}", response_model=Optional[CustomRecipeResponse])
+async def get_recipe_by_external_id(
+    external_id: str,
+    token_payload: Dict = Depends(verify_internal_service_token)
+):
+    """
+    Find in the db if a recipe with this external ID already exists.
+    """
+    result = recipe_service.get_recipe_by_external_id(external_id)
+    if not result:
+        return None 
+    return result
+
+@router.post("/shadow", response_model=Dict[str, int], status_code=status.HTTP_201_CREATED)
+async def create_shadow_recipe(
+    recipe: ShadowRecipeCreate,
+    token_payload: Dict = Depends(verify_internal_service_token)
+):
+    recipe_id = recipe_service.create_shadow_recipe(recipe.dict())
+    
+    if not recipe_id:
+         raise HTTPException(status_code=500, detail="Failed to create shadow recipe")
+         
+    return {"id": recipe_id}

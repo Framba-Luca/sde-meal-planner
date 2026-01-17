@@ -3,8 +3,6 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 from typing import Annotated
-import traceback
-import sys
 
 from src.services.auth_service import AuthService
 from src.services.oauth_service import GoogleAuthService

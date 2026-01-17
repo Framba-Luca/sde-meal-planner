@@ -46,7 +46,18 @@ class RecipeResponse(BaseModel):
     ingredients: List[Dict[str, Any]] = []
     created_at: str
 
+class ReviewCreate(BaseModel):
+    recipe_id: int
+    review: str
+    rating: int
 
+class ReviewUpdate(BaseModel):
+    review_id: int
+    user_token: str
+    review: Optional[str] = None
+    rating: Optional[int] = None
+
+    
 # Endpoints
 @app.get("/")
 async def root():
@@ -165,6 +176,12 @@ async def delete_recipe(recipe_id: int):
         detail="Failed to delete recipe"
     )
 
+@app.get("/reviews/{recipe_id}")
+async def get_reviews(recipe_id: int):
+    """Get all reviews for a specific recipe"""
+    reviews = recipe_crud.get_reviews(recipe_id)
+    # Se non ci sono recensioni, ritorna lista vuota invece di 404
+    return reviews if reviews else []
 
 if __name__ == "__main__":
     import uvicorn

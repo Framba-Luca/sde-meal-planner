@@ -1,5 +1,4 @@
-import psycopg2
-from psycopg2 import pool
+import psycopg2.pool
 from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 from typing import Generator

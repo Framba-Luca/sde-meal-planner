@@ -64,6 +64,16 @@ SCHEMA_QUERIES = [
         ingredient_name VARCHAR(255) NOT NULL,
         measure VARCHAR(100)
     )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS reviews (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES users(id) ON DELETE CASCADE,
+        recipe_id INT REFERENCES custom_recipes(id) ON DELETE CASCADE,
+        rating INT CHECK (rating >= 1 AND rating <= 5),
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+    )
     """
 ]
 
@@ -80,7 +90,18 @@ def init_tables():
             migration_queries = [
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(100)",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE"
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE",
+
+                # --- MIGRAZIONI PER SOLUZIONE 3 ---
+                # 1. Aggiungiamo i flag per distinguere ricette custom da quelle API
+                "ALTER TABLE custom_recipes ADD COLUMN IF NOT EXISTS is_custom BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE custom_recipes ADD COLUMN IF NOT EXISTS external_id VARCHAR(50)",
+                
+                # 2. Rendiamo user_id nullable perché una ricetta importata da API non ha un "creatore" interno
+                "ALTER TABLE custom_recipes ALTER COLUMN user_id DROP NOT NULL",
+                
+                # 3. Vincolo di unicità per non duplicare le ricette shadow
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_recipes_external_id ON custom_recipes(external_id)"
             ]
             for query in migration_queries:
                 try:

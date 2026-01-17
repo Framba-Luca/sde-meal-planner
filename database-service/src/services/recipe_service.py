@@ -107,3 +107,42 @@ class RecipeService:
         except Exception as e:
             print(f"Error deleting recipe: {e}")
             return False
+    
+    def get_recipe_by_external_id(self, external_id: str) -> Optional[Dict[str, Any]]:
+        """Find the recipes with the TheMealDB ID"""
+        query = "SELECT * FROM custom_recipes WHERE external_id = %s"
+        try: 
+            with db_adapter.get_cursor() as cur:
+                cur.execute(query, (external_id,))
+            return cur.fetchone()
+        except Exception as e:
+            print(f"Error fetching recipe by external ID: {e}")
+            return None
+
+    def create_shadow_recipe(self, recipe_data: Dict[str, Any]) -> Optional[int]:
+        """
+        Create or update an 'shadow' recipe imported by API.
+        Uses ON CONFLICT to avoid duplicates on concurrency.
+        """
+        query = """
+            INSERT INTO custom_recipes 
+            (name, image, external_id, is_custom, category, area)
+            VALUES (%s, %s, %s, FALSE, %s, %s)
+            ON CONFLICT (external_id) 
+            DO UPDATE SET external_id = EXCLUDED.external_id 
+            RETURNING id
+        """
+        try:
+            with db_adapter.get_cursor() as cur:
+                cur.execute(query, (
+                    recipe_data.get('name'),
+                    recipe_data.get('image'),
+                    recipe_data.get('external_id'),
+                    recipe_data.get('category'),
+                    recipe_data.get('area')
+                ))
+                result = cur.fetchone()
+                return result['id'] if result else None
+        except Exception as e:
+            print(f"Error creating shadow recipe: {e}")
+            return None
