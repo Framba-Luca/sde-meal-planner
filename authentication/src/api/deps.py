@@ -33,13 +33,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
         full_name: str = payload.get("full_name")
-        if username is None:
+        user_id: int = payload.get("id")
+
+        if username is None or user_id is None:
             raise credentials_exception
         
-        # Qui potremmo chiamare il DB per assicurarci che l'utente esista ancora,
-        # ma per performance ci fidiamo del token (Stateless Auth)
-        # Da vedere più avanti se serve un controllo extra
-        return User(username=username, full_name=full_name)
+        return User(
+            id=user_id,
+            username=username, 
+            full_name=full_name
+        )
         
     except JWTError:
         raise credentials_exception

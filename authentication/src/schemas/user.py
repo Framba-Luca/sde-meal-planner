@@ -10,6 +10,7 @@ class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
+    id: int
     disabled: bool = False
     
     class Config:

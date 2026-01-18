@@ -33,6 +33,9 @@ def create_token(subject: Union[str, Any], token_type: str, expires_delta: timed
         "type": token_type
     }
 
+    if extra_claims:
+        to_encode.update(extra_claims)
+
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 

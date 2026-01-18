@@ -110,8 +110,8 @@ class RecipesFetchService:
             ingredient_key = f"strIngredient{i}"
             measure_key = f"strMeasure{i}"
             
-            ingredient = recipe.get(ingredient_key, "").strip()
-            measure = recipe.get(measure_key, "").strip()
+            ingredient = (recipe.get(ingredient_key) or "").strip()
+            measure = (recipe.get(measure_key, "")).strip()
             
             if ingredient:
                 ingredients.append({

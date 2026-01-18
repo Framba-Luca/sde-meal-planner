@@ -1,0 +1,78 @@
+import streamlit as st
+from modules.config import RECIPE_CRUD_URL
+from modules.api import make_request
+
+def render_reviews_section(external_id, recipe_name, recipe_id=None):
+    """
+    Component used in recipe detail views.
+    """
+    safe_ext_id = str(external_id)
+    
+    st.markdown("---")
+    st.subheader(f"Reviews for {recipe_name}")
+
+    _render_reviews_list(safe_ext_id)
+    _render_review_form(safe_ext_id, recipe_id)
+
+def _render_reviews_list(external_id):
+    reviews = make_request(f"{RECIPE_CRUD_URL}/reviews/external/{external_id}")
+    
+    if not reviews:
+        st.info("No reviews yet. Be the first to review!")
+        return
+
+    for rev in reviews:
+        with st.container(border=True):
+            c1, c2 = st.columns([6, 1])
+            with c1:
+                rating_val = rev.get('rating', 0)
+                stars = "★" * rating_val + "☆" * (5 - rating_val)
+                st.markdown(f"**{rev.get('username', 'Unknown')}** {stars}")
+                st.write(rev.get('comment', ''))
+                st.caption(f"Date: {rev.get('created_at', '')[:10]}")
+            
+            with c2:
+                current_user_id = st.session_state.get("user_id")
+                # Controlliamo se l'utente è il proprietario della recensione
+                if current_user_id and str(rev.get("user_id")) == str(current_user_id):
+                    # CHIAVE UNICA SICURA per il bottone delete
+                    btn_key = f"del_{external_id}_{rev['id']}"
+                    
+                    if st.button("🗑️", key=btn_key, help="Delete your review"):
+                        if make_request(f"{RECIPE_CRUD_URL}/reviews/{rev['id']}", method="DELETE"):
+                            st.toast("Review deleted!")
+                            st.rerun()
+
+def _render_review_form(external_id, recipe_id):
+    st.markdown("#### Write a Review")
+    
+    form_key = f"form_review_{external_id}"
+    
+    with st.form(key=form_key):
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            rating = st.slider("Rating", 1, 5, 5)
+        with col2:
+            comment = st.text_area("Comment", height=70, placeholder="Share your experience...")
+        
+        submitted = st.form_submit_button("Submit Review")
+        
+        if submitted:
+            if not st.session_state.get("user_id"):
+                st.error("You must be logged in to post a review.")
+                return
+
+            if not comment:
+                st.warning("Please write a comment.")
+                return
+
+            payload = {
+                "rating": rating, 
+                "comment": comment, 
+                "external_id": external_id,
+                "recipe_id": recipe_id
+            }
+            
+            if make_request(f"{RECIPE_CRUD_URL}/reviews/", method="POST", data=payload):
+                st.success("Review posted!")
+                st.rerun()
