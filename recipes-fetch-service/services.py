@@ -132,14 +132,15 @@ class RecipesFetchService:
             Formatted recipe dictionary
         """
         return {
+            # Pydantic convertirà automaticamente la stringa ID in int
             "id": recipe.get("idMeal"),
             "name": recipe.get("strMeal"),
             "category": recipe.get("strCategory"),
             "area": recipe.get("strArea"),
             "instructions": recipe.get("strInstructions"),
             "image": recipe.get("strMealThumb"),
-            "tags": recipe.get("strTags", ""),
-            "youtube": recipe.get("strYoutube", ""),
+            "tags": recipe.get("strTags") or "", 
+            "youtube": recipe.get("strYoutube") or "",
             "ingredients": self.parse_recipe_ingredients(recipe)
         }
     

@@ -308,3 +308,24 @@ class RecipeCRUDService:
         url = f"{self.database_service_url}/api/v1/reviews/recipe/{recipe_id}"
         result = self._make_request(url, method="GET")
         return result if result is not None else []
+    
+    def _parse_ingredients_to_list(self, meal_data: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Helper: Converte i 20 campi separati di TheMealDB in una lista pulita.
+        """
+        ingredients_list = []
+        # TheMealDB ha massimo 20 ingredienti numerati da 1 a 20
+        for i in range(1, 21):
+            ing_key = f"strIngredient{i}"
+            measure_key = f"strMeasure{i}"
+            
+            ingredient = meal_data.get(ing_key)
+            measure = meal_data.get(measure_key)
+            
+            # Se l'ingrediente esiste e non è vuoto
+            if ingredient and ingredient.strip():
+                ingredients_list.append({
+                    "name": ingredient.strip(),
+                    "measure": measure.strip() if measure else ""
+                })
+        return ingredients_list

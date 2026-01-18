@@ -167,6 +167,39 @@ def fetch_user_id(username):
         return True
     return False
 
+def get_ingredients_list(meal):
+    """
+    Estrae gli ingredienti. Gestisce due casi:
+    1. Risposta formattata (Detail Fetch): ha una lista "ingredients"
+    2. Risposta raw (Search): ha chiavi "strIngredient1...20"
+    """
+    final_list = []
+
+    # CASO 1: Abbiamo già una lista "ingredients" (quello del tuo esempio JSON)
+    if "ingredients" in meal and isinstance(meal["ingredients"], list):
+        for item in meal["ingredients"]:
+            # Il fetch service usa la chiave "ingredient", il crud service a volte usa "name"
+            ing_name = item.get("ingredient") or item.get("name")
+            meas = item.get("measure", "")
+            
+            if ing_name:
+                meas_str = f"{meas.strip()} " if meas and meas.strip() else ""
+                final_list.append(f"• {meas_str}{ing_name.strip()}")
+        
+        return final_list
+
+    # CASO 2: Formato Raw di TheMealDB (strIngredient1, strIngredient2...)
+    for i in range(1, 21):
+        ing = meal.get(f"strIngredient{i}")
+        meas = meal.get(f"strMeasure{i}")
+        
+        if ing and ing.strip():
+            clean_ing = ing.strip()
+            clean_meas = f"{meas.strip()} " if meas and meas.strip() else ""
+            final_list.append(f"• {clean_meas}{clean_ing}")
+            
+    return final_list
+
 def login_page():
     """Display login page"""
     st.title("🍽️ Meal Planner")
@@ -509,48 +542,67 @@ def recipe_search_page():
     if search_results and "meals" in search_results and search_results["meals"]:
         st.write(f"Found {len(search_results['meals'])} recipes:")
         
-        for meal in search_results["meals"]:
-            external_id = meal.get('idMeal')
-            recipe_name = meal.get('strMeal')
+        for partial_meal in search_results["meals"]:
+            external_id = partial_meal.get('idMeal')
+            recipe_name = partial_meal.get('strMeal')
             
+            meal = partial_meal
+            
+            if not partial_meal.get('strInstructions'):
+                detail_response = make_request(f"{RECIPES_FETCH_URL}/recipe/{external_id}")
+                
+                if detail_response:
+                    if "meals" in detail_response and detail_response["meals"]:
+                         meal = detail_response["meals"][0]
+                    elif "id" in detail_response: 
+                         meal = detail_response 
+
             with st.expander(f"🍽️ {recipe_name}"):
                 col1, col2 = st.columns([1, 2])
                 
                 with col1:
-                    if meal.get('strMealThumb'):
-                        st.image(meal['strMealThumb'], use_column_width=True)
+                    img_url = meal.get('strMealThumb') or meal.get('image')
+                    if img_url:
+                        st.image(img_url, use_column_width=True)
                     else:
-                        st.write("No Image")
+                        st.info("No Image")
+                    
+                    st.markdown("#### 🛒 Ingredients")
+                    # Usiamo l'helper
+                    ing_list = get_ingredients_list(meal)
+                    
+                    if ing_list:
+                        st.markdown("\n".join(ing_list))
+                    else:
+                        st.info("No ingredients info")
                 
                 with col2:
-                    st.write(f"**Category:** {meal.get('strCategory', 'N/A')}")
-                    st.write(f"**Area:** {meal.get('strArea', 'N/A')}")
+                    cat = meal.get('strCategory') or meal.get('category') or 'N/A'
+                    area = meal.get('strArea') or meal.get('area') or 'N/A'
                     
-                    if meal.get('strInstructions'):
-                        st.markdown("**Instructions:**")
-                        instr = meal['strInstructions']
-                        if len(instr) > 300:
-                            st.write(instr[:300] + "...")
-                        else:
-                            st.write(instr)
+                    st.write(f"**Category:** {cat}")
+                    st.write(f"**Area:** {area}")
                     
-                    if meal.get('strYoutube'):
-                        st.markdown(f"[Watch on YouTube]({meal['strYoutube']})")
+                    instr = meal.get('strInstructions') or meal.get('instructions')
+                    if instr:
+                        st.markdown("### 📝 Instructions")
+                        st.write(instr)
+                    
+                    yt_link = meal.get('strYoutube') or meal.get('youtube')
+                    if yt_link:
+                        st.markdown(f"[🎥 Watch on YouTube]({yt_link})")
 
-                # ============================================================
-                # REVIEW SYSTEM INTEGRATION
-                # ============================================================
-                # We pass the external_id. The backend will automatically handle 
-                # the creation of the Shadow Recipe upon the first save.
+                st.divider()
+                # Review System
                 render_reviews_ui(
                     recipe_id=None,
                     external_id=external_id,
                     recipe_name=recipe_name
                 )
-                # ============================================================
 
     elif search_results is not None:
         st.warning("No recipes found matching your criteria.")
+
 
 def my_meal_plans_page():
     """View user's meal plans"""
