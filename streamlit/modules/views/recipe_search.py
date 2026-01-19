@@ -1,5 +1,5 @@
 import streamlit as st
-from modules.config import RECIPES_FETCH_URL
+from modules.config import RECIPES_FETCH_URL, RECIPE_CRUD_URL
 from modules.api import make_request
 from modules.utils import get_ingredients_list
 # Import the new reviews component
