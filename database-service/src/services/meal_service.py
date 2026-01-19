@@ -1,106 +1,95 @@
-from typing import List, Dict, Any, Optional
-from src.core.database import db_adapter
+from typing import List, Optional, Dict, Any
+from sqlmodel import Session, select
+from datetime import date
+
+# Import DB models
+from src.models.meal_model import MealPlan, MealPlanItem
+# Import Pydantic schemas (input/output)
 from src.schemas.meal import MealPlanCreate, MealPlanItemCreate, MealPlanItemUpdate
 
+
 class MealService:
-    def create_meal_plan(self, plan: MealPlanCreate) -> Optional[int]:
-        query = """
-            INSERT INTO meal_plans (user_id, start_date, end_date)
-            VALUES (%s, %s, %s)
-            RETURNING id
-        """
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, (plan.user_id, plan.start_date, plan.end_date))
-                result = cur.fetchone()
-                return result['id'] if result else None
-        except Exception as e:
-            print(f"Error creating meal plan: {e}")
-            return None
+    def __init__(self, session: Session):
+        self.session = session
 
-    def get_meal_plan(self, meal_plan_id: int) -> Optional[Dict[str, Any]]:
-        query = "SELECT * FROM meal_plans WHERE id = %s"
-        with db_adapter.get_cursor() as cur:
-            cur.execute(query, (meal_plan_id,))
-            result = cur.fetchone()
-            return result
+    # --- MEAL PLANS (Header) ---
 
-    def get_meal_plans_by_user(self, user_id: int) -> List[Dict[str, Any]]:
-        query = "SELECT * FROM meal_plans WHERE user_id = %s ORDER BY start_date DESC"
-        with db_adapter.get_cursor() as cur:
-            cur.execute(query, (user_id,))
-            return cur.fetchall()
+    def create_meal_plan(self, plan: MealPlanCreate) -> int:
+        """Creates a new empty weekly meal plan."""
+        db_plan = MealPlan(
+            user_id=plan.user_id,
+            start_date=plan.start_date,
+            end_date=plan.end_date
+        )
+        self.session.add(db_plan)
+        self.session.commit()
+        self.session.refresh(db_plan)
+        return db_plan.id
+
+    def get_meal_plan(self, meal_plan_id: int) -> Optional[MealPlan]:
+        return self.session.get(MealPlan, meal_plan_id)
+
+    def get_meal_plans_by_user(self, user_id: int) -> List[MealPlan]:
+        statement = (
+            select(MealPlan)
+            .where(MealPlan.user_id == user_id)
+            .order_by(MealPlan.start_date.desc())
+        )
+        return self.session.exec(statement).all()
 
     def delete_meal_plan(self, meal_plan_id: int) -> bool:
-        query = "DELETE FROM meal_plans WHERE id = %s"
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, (meal_plan_id,))
-                return cur.rowcount > 0
-        except Exception as e:
-            print(f"Error deleting meal plan: {e}")
+        plan = self.session.get(MealPlan, meal_plan_id)
+        if not plan:
             return False
+        # Cascade delete on items is handled automatically
+        self.session.delete(plan)
+        self.session.commit()
+        return True
 
-    def add_meal_item(self, item: MealPlanItemCreate) -> Optional[int]:
-        query = """
-            INSERT INTO meal_plan_items (meal_plan_id, mealdb_id, meal_date, meal_type)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id
-        """
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, (item.meal_plan_id, item.mealdb_id, item.meal_date, item.meal_type))
-                result = cur.fetchone()
-                return result['id'] if result else None
-        except Exception as e:
-            print(f"Error adding meal item: {e}")
+    # --- MEAL ITEMS (Plan rows) ---
+
+    def add_meal_item(self, item: MealPlanItemCreate) -> int:
+        """Adds a recipe to a specific day of the meal plan."""
+        db_item = MealPlanItem(
+            meal_plan_id=item.meal_plan_id,
+            mealdb_id=item.mealdb_id,
+            meal_date=item.meal_date,
+            meal_type=item.meal_type
+        )
+        self.session.add(db_item)
+        self.session.commit()
+        self.session.refresh(db_item)
+        return db_item.id
+
+    def get_meal_plan_items(self, meal_plan_id: int) -> List[MealPlanItem]:
+        statement = select(MealPlanItem).where(
+            MealPlanItem.meal_plan_id == meal_plan_id
+        )
+        return self.session.exec(statement).all()
+
+    def update_meal_item(
+        self,
+        item_id: int,
+        item_update: MealPlanItemUpdate
+    ) -> Optional[MealPlanItem]:
+        db_item = self.session.get(MealPlanItem, item_id)
+        if not db_item:
             return None
 
-    def get_meal_plan_items(self, meal_plan_id: int) -> List[Dict[str, Any]]:
-        query = "SELECT * FROM meal_plan_items WHERE meal_plan_id = %s ORDER BY meal_date, meal_type"
-        with db_adapter.get_cursor() as cur:
-            cur.execute(query, (meal_plan_id,))
-            return cur.fetchall()
+        # Update only provided fields (PATCH behavior)
+        item_data = item_update.dict(exclude_unset=True)
+        for key, value in item_data.items():
+            setattr(db_item, key, value)
 
-    def update_meal_item(self, item_id: int, item_update: MealPlanItemUpdate) -> Optional[Dict[str, Any]]:
-        # Build dynamic update query based on provided fields
-        update_fields = []
-        values = []
-        
-        if item_update.mealdb_id is not None:
-            update_fields.append("mealdb_id = %s")
-            values.append(item_update.mealdb_id)
-        
-        if item_update.meal_type is not None:
-            update_fields.append("meal_type = %s")
-            values.append(item_update.meal_type)
-        
-        if not update_fields:
-            return None
-        
-        values.append(item_id)
-        query = f"""
-            UPDATE meal_plan_items 
-            SET {', '.join(update_fields)}
-            WHERE id = %s
-            RETURNING *
-        """
-        
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, values)
-                result = cur.fetchone()
-                return result
-        except Exception as e:
-            print(f"Error updating meal item: {e}")
-            return None
+        self.session.add(db_item)
+        self.session.commit()
+        self.session.refresh(db_item)
+        return db_item
 
     def delete_meal_item(self, item_id: int) -> bool:
-        query = "DELETE FROM meal_plan_items WHERE id = %s"
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, (item_id,))
-                return cur.rowcount > 0
-        except Exception as e:
-            print(f"Error deleting meal item: {e}")
+        item = self.session.get(MealPlanItem, item_id)
+        if not item:
             return False
+        self.session.delete(item)
+        self.session.commit()
+        return True

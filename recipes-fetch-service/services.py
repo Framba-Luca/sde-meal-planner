@@ -5,20 +5,24 @@ from typing import Dict, Any, List, Optional
 import requests
 import redis
 import json
+import os
 
 # TheMealDB API base URL
 THEMEALDB_API_URL = "https://www.themealdb.com/api/json/v1/1"
-REDIS_HOST: str = "redis"
-REDIS_PORT: int = 6379
+REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT: int = os.getenv("REDIS_PORT", 6379)
 
 class RecipesFetchService:
     """Service for fetching recipes from TheMealDB"""
     
     def __init__(self):
         self.api_url = THEMEALDB_API_URL
-        self.cache = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    
+        self.cache = redis.Redis(
+            host=os.getenv("REDIS_HOST", "redis"),
+            port=int(os.getenv("REDIS_PORT", 6379)),
+            decode_responses=True)
     def _make_request(self, endpoint: str) -> Optional[Dict[str, Any]]:
+    
         """Make a request to TheMealDB API"""
         try:
             response = requests.get(f"{self.api_url}/{endpoint}")
@@ -30,8 +34,18 @@ class RecipesFetchService:
     
     def search_by_name(self, name: str) -> Optional[List[Dict[str, Any]]]:
         """Search for recipes by name"""
+        cache_key = f"search:name:{name.lower()}"
+        cached = self.cache.get(cache_key)
+        if cached:
+            return json.loads(cached)
+
         result = self._make_request(f"search.php?f={name}")
-        return result.get("meals") if result else None
+        data = result.get("meals") if result else None
+        
+        if data:
+            self.cache.setex(cache_key, 3600, json.dumps(data))
+            
+        return data
         
     def search_by_first_letter(self, letter: str) -> Optional[List[Dict[str, Any]]]:
         """Search for recipes by first letter"""

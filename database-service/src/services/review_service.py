@@ -1,55 +1,71 @@
-from typing import List, Dict, Any, Optional
-from src.core.database import db_adapter
+from typing import List, Optional, Dict, Any
+from sqlmodel import Session, select
 from datetime import datetime
 
-class ReviewService:
+from src.models.review_model import Review
+from src.models.user_model import User  # Needed to JOIN and retrieve the username
 
-    def create_review(self, user_id: int, recipe_id: int, rating: int, comment: str) -> Optional[int]:
-        query = """
-            INSERT INTO reviews (user_id, recipe_id, rating, comment, created_at)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id
-        """
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, (user_id, recipe_id, rating, comment, datetime.now()))
-                result = cur.fetchone()
-                return result['id'] if result else None
-        except Exception as e:
-            print(f"Error creating review: {e}")
-            return None
+
+class ReviewService:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create_review(
+        self,
+        user_id: int,
+        recipe_id: int,
+        rating: int,
+        comment: str,
+        created_at: Optional[datetime] = None
+    ) -> int:
+        if not created_at:
+            created_at = datetime.utcnow()
+
+        db_review = Review(
+            user_id=user_id,
+            recipe_id=recipe_id,
+            rating=rating,
+            comment=comment,
+            created_at=created_at
+        )
+        self.session.add(db_review)
+        self.session.commit()
+        self.session.refresh(db_review)
+        return db_review.id
 
     def get_reviews_by_recipe(self, recipe_id: int) -> List[Dict[str, Any]]:
-        query = """
-            SELECT r.*, u.username 
-            FROM reviews r
-            LEFT JOIN users u ON r.user_id = u.id
-            WHERE r.recipe_id = %s
-            ORDER BY r.created_at DESC
         """
-        with db_adapter.get_cursor() as cur:
-            cur.execute(query, (recipe_id,))
-            return cur.fetchall()
+        Retrieves reviews and performs a JOIN with User to get the username.
+        Returns a list of dictionaries compatible with the ReviewResponse schema.
+        """
+        # SELECT reviews.*, users.username FROM reviews JOIN users ON ...
+        statement = (
+            select(Review, User.username)
+            .join(User)
+            .where(Review.recipe_id == recipe_id)
+            .order_by(Review.created_at.desc())
+        )
 
-    def get_review_by_id(self, review_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Retrieves a single review
-        """
-        query = """
-            SELECT * 
-            FROM reviews
-            WHERE id = %s
-        """
-        with db_adapter.get_cursor() as cur:
-            cur.execute(query, (review_id,))
-            return cur.fetchone()
+        results = self.session.exec(statement).all()
 
-    def delete_review(self, review_id: int) -> bool:
-        query = "DELETE FROM reviews WHERE id = %s"
-        try:
-            with db_adapter.get_cursor() as cur:
-                cur.execute(query, (review_id,))
-                return cur.rowcount > 0
-        except Exception as e:
-            print(f"Error deleting review: {e}")
+        # SQLModel returns a list of tuples: (ReviewObject, username_string)
+        # Convert them into a flat structure suitable for Pydantic
+        output = []
+        for review, username in results:
+            # Convert the Review object to dict and add the username
+            review_dict = review.model_dump()
+            review_dict["username"] = username
+            output.append(review_dict)
+
+        return output
+
+    def get_review_by_id(self, review_id: int) -> Optional[Review]:
+        return self.session.get(Review, review_id)
+
+    def delete_review_raw(self, review_id: int) -> bool:
+        review = self.session.get(Review, review_id)
+        if not review:
             return False
+        self.session.delete(review)
+        self.session.commit()
+        return True

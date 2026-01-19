@@ -1,110 +1,111 @@
-from typing import List, Dict, Optional
-from datetime import datetime
-from fastapi import APIRouter, HTTPException, status, Depends
-from pydantic import BaseModel
-from src.schemas.meal import MealPlanCreate, MealPlanResponse, MealPlanItemCreate, MealPlanItemResponse
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List
+from sqlmodel import Session
+
+from src.core.database import get_session
 from src.services.meal_service import MealService
-from src.api.deps import verify_token, verify_internal_service_token
+from src.schemas.meal import (
+    MealPlanCreate, MealPlanResponse,
+    MealPlanItemCreate, MealPlanItemResponse
+)
 
 router = APIRouter()
-meal_service = MealService()
 
-# Schema for updating meal plan items
-class MealPlanItemUpdate(BaseModel):
-    mealdb_id: Optional[int] = None
-    meal_type: Optional[str] = None
+# --- DEPENDENCY INJECTION ---
+# Provides a MealService instance for each request
+def get_meal_service(session: Session = Depends(get_session)) -> MealService:
+    return MealService(session)
+
+
+# --- MEAL PLAN ROUTES ---
 
 @router.post("/", response_model=MealPlanResponse, status_code=status.HTTP_201_CREATED)
 async def create_meal_plan(
     plan: MealPlanCreate,
-    token_payload: Dict = Depends(verify_internal_service_token) # <--- Internal Service Auth
+    service: MealService = Depends(get_meal_service)
 ):
-    """Create a new meal plan."""
-    plan_id = meal_service.create_meal_plan(plan)
-    if not plan_id:
-        raise HTTPException(status_code=400, detail="Failed to create meal plan")
-    
-    # In a real app, you might fetch the full object again. 
-    # Here we construct a minimal response.
-    return {
-        "id": plan_id, 
-        "user_id": plan.user_id, 
-        "start_date": plan.start_date, 
-        "end_date": plan.end_date,
-        "created_at": datetime.utcnow()
-    }
+    """
+    Creates a new weekly meal plan.
+    Returns the full plan after creation.
+    """
+    plan_id = service.create_meal_plan(plan)
+    return service.get_meal_plan(plan_id)
 
-@router.get("/{meal_plan_id}", response_model=MealPlanResponse)
-async def get_meal_plan(
-    meal_plan_id: int,
-    token_payload: Dict = Depends(verify_internal_service_token)
-):
-    """Get a meal plan by ID."""
-    result = meal_service.get_meal_plan(meal_plan_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Meal plan not found")
-    return result
 
 @router.get("/user/{user_id}", response_model=List[MealPlanResponse])
-async def get_meal_plans_by_user(
+async def get_plans_by_user(
     user_id: int,
-    token_payload: Dict = Depends(verify_internal_service_token)
+    service: MealService = Depends(get_meal_service)
 ):
-    """Get all meal plans for a specific user."""
-    results = meal_service.get_meal_plans_by_user(user_id)
-    return results
+    """
+    Retrieves all meal plans for a specific user.
+    """
+    return service.get_meal_plans_by_user(user_id)
 
-@router.delete("/{meal_plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+
+@router.get("/{plan_id}", response_model=MealPlanResponse)
+async def get_plan_by_id(
+    plan_id: int,
+    service: MealService = Depends(get_meal_service)
+):
+    """
+    Retrieves a meal plan by its ID.
+    """
+    plan = service.get_meal_plan(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Meal Plan not found")
+    return plan
+
+
+@router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_meal_plan(
-    meal_plan_id: int,
-    token_payload: Dict = Depends(verify_internal_service_token)
+    plan_id: int,
+    service: MealService = Depends(get_meal_service)
 ):
-    """Delete a meal plan."""
-    success = meal_service.delete_meal_plan(meal_plan_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Meal plan not found")
-    return None
+    """
+    Deletes a meal plan by its ID.
+    Cascade deletes all items associated with the plan.
+    """
+    if not service.delete_meal_plan(plan_id):
+        raise HTTPException(status_code=404, detail="Meal Plan not found")
+    return
 
-@router.post("/items/", response_model=MealPlanItemResponse, status_code=status.HTTP_201_CREATED)
+
+# --- MEAL PLAN ITEM ROUTES ---
+
+@router.post("/items", response_model=MealPlanItemResponse, status_code=status.HTTP_201_CREATED)
 async def add_meal_item(
     item: MealPlanItemCreate,
-    token_payload: Dict = Depends(verify_internal_service_token)
+    service: MealService = Depends(get_meal_service)
 ):
-    """Add a meal item (recipe) to a plan."""
-    item_id = meal_service.add_meal_item(item)
-    if not item_id:
-        raise HTTPException(status_code=400, detail="Failed to add item")
-    
-    return {**item.dict(), "id": item_id}
+    """
+    Adds a recipe item to a specific day of a meal plan.
+    Returns the created item with its ID.
+    """
+    item_id = service.add_meal_item(item)
+    # Simple reconstruction for the response
+    return MealPlanItemResponse(id=item_id, **item.dict())
 
-@router.get("/items/{meal_plan_id}", response_model=List[MealPlanItemResponse])
-async def get_meal_plan_items(
-    meal_plan_id: int,
-    token_payload: Dict = Depends(verify_internal_service_token)
-):
-    """Get all items for a specific meal plan."""
-    results = meal_service.get_meal_plan_items(meal_plan_id)
-    return results
 
-@router.put("/items/{item_id}", response_model=MealPlanItemResponse)
-async def update_meal_item(
-    item_id: int,
-    item_update: MealPlanItemUpdate,
-    token_payload: Dict = Depends(verify_internal_service_token)
+@router.get("/{plan_id}/items", response_model=List[MealPlanItemResponse])
+async def get_plan_items(
+    plan_id: int,
+    service: MealService = Depends(get_meal_service)
 ):
-    """Update a meal item in a plan."""
-    result = meal_service.update_meal_item(item_id, item_update)
-    if not result:
-        raise HTTPException(status_code=404, detail="Meal item not found")
-    return result
+    """
+    Retrieves all items for a specific meal plan.
+    """
+    return service.get_meal_plan_items(plan_id)
+
 
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_meal_item(
     item_id: int,
-    token_payload: Dict = Depends(verify_internal_service_token)
+    service: MealService = Depends(get_meal_service)
 ):
-    """Delete a meal item from a plan."""
-    success = meal_service.delete_meal_item(item_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Meal item not found")
-    return None
+    """
+    Deletes a single meal item by its ID.
+    """
+    if not service.delete_meal_item(item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
+    return
