@@ -93,122 +93,128 @@ def _render_search_filters():
     return search_triggered
 
 def _render_search_results():
-    """Render search results grid with robust deduplication."""
-    
-    # 1. Safe initialization
+    """Render search results grid supporting both Custom and External recipes."""    
     if "search_results" not in st.session_state:
         st.session_state.search_results = []
 
-    # 2. Exit silently if no results
     if not st.session_state.search_results:
         return
 
-    # 3. ROBUST DEDUPLICATION (Fixes Duplicate Key Error)
     seen_ids = set()
     unique_results = []
     
     for meal in st.session_state.search_results:
-        # Get ID from either format
-        mid = meal.get("id") or meal.get("idMeal")
+        internal_id = meal.get("id_recipe") or meal.get("id")
+        external_id = meal.get("id_external") or meal.get("id_esterno") or meal.get("idMeal")
         
-        if mid:
-            # FORCE STRING CONVERSION!
-            # This ensures that 53284 (int) and "53284" (str) are treated as the same ID
-            mid_str = str(mid)
+        if meal.get("is_external"):
+            uid = f"ext_{external_id}"
+        else:
+            uid = f"int_{internal_id}"
             
-            if mid_str not in seen_ids:
-                seen_ids.add(mid_str)
-                unique_results.append(meal)
+        if uid not in seen_ids:
+            seen_ids.add(uid)
+            unique_results.append(meal)
             
-    # 4. Rendering
-    st.success(f"Found {len(unique_results)} recipes.")
+    st.success(f"Found {len(unique_results)} recipes (Mixed Custom & External).")
     
     for meal in unique_results:
-        # Secure ID for widget keys (Always use the string version)
-        raw_id = meal.get("id") or meal.get("idMeal")
-        ext_id = str(raw_id) 
-        
-        # Secure Name for display
+        is_ext = meal.get("is_external", False)
         name = meal.get("name") or meal.get("strMeal") or "Unknown Recipe"
         
-        # Expandable Box
-        with st.expander(f"{name}"):
-            _render_single_recipe_detail(ext_id, meal)
+        ext_id = str(meal.get("id_external") or meal.get("id_recipe") or meal.get("idMeal"))
+        
+        label = f" {name} {' (External)' if is_ext else ' (Custom)'}"
+        
+        with st.expander(label):
+            _render_single_recipe_detail(ext_id, meal, is_external=is_ext)
 
-def _render_single_recipe_detail(ext_id, partial_data):
+def _render_single_recipe_detail(item_id, partial_data, is_external=False):
     """
-    Render single recipe with TRUE Lazy Loading.
-    Fetches data only when the user explicitly asks for it.
+    Render single recipe with Mixed Loading (Internal vs External).
+    Supports both custom DB recipes and TheMealDB external recipes.
     """
     
-    # 1. Check if data is already in session cache
-    cached_data = st.session_state.loaded_recipes.get(ext_id)
+    # 1. SESSION CACHE MANAGEMENT
+    # We use a prefix (ext_ or int_) to avoid ID collisions between different data sources
+    cache_key = f"{'ext' if is_external else 'int'}_{item_id}"
+    cached_data = st.session_state.loaded_recipes.get(cache_key)
     
     # Use cached data if available, otherwise use the partial data from search results
     meal = cached_data if cached_data else partial_data
     
-    # Check if we have full details (e.g., instructions)
-    has_instructions = meal.get("strInstructions") or meal.get("instructions")
+    # Check if we have full details (instructions are the marker for a "full" object)
+    # Internal recipes use 'instructions', external use 'strInstructions'
+    has_instructions = meal.get("instructions") or meal.get("strInstructions")
     
     # --- LAZY LOADING BLOCK ---
-    # If we DO NOT have instructions, we only show a "Load" button.
-    # No API calls happen here unless the button is clicked.
+    # If full details are missing, show a button to trigger the specific API call
     if not has_instructions:
         c1, c2 = st.columns([1, 4])
         with c1:
-             # Display the thumbnail we already have from the search list
-             thumb = meal.get("image") or meal.get("strMealThumb")
-             if thumb:
-                 st.image(thumb, width="stretch")
+            # Show thumbnail from search results while loading
+            thumb = meal.get("image") or meal.get("strMealThumb")
+            if thumb:
+                st.image(thumb, use_container_width=True)
         with c2:
-            st.info("Details not loaded yet.")
+            st.info(f"Details for {'External' if is_external else 'Custom'} recipe not loaded.")
             
-            # THE KEY: The make_request call happens ONLY if this specific button is clicked
-            if st.button("📥 Load Recipe & Reviews", key=f"load_{ext_id}"):
-                with st.spinner("Downloading data..."):
-                    full = make_request(f"{RECIPES_FETCH_URL}/recipe/{ext_id}")
+            # API call happens ONLY when this specific button is clicked
+            if st.button("📥 Load Details & Reviews", key=f"load_{cache_key}"):
+                with st.spinner("Fetching data..."):
+                    # ROUTING LOGIC:
+                    # External recipes -> recipes-fetch-service
+                    # Custom recipes -> recipe-crud-interaction (orchestrator)
+                    if is_external:
+                        url = f"{RECIPES_FETCH_URL}/recipe/{item_id}"
+                    else:
+                        url = f"{RECIPE_CRUD_URL}/api/v1/recipes/{item_id}"
+                    
+                    full = make_request(url)
                     
                     if full:
-                        # Handle different API response structures (list vs dict)
-                        if "meals" in full:
-                            final_meal = full["meals"][0]
-                        else:
-                            final_meal = full
+                        # Normalize response (TheMealDB wraps results in a 'meals' list)
+                        final_meal = full["meals"][0] if "meals" in full else full
                         
-                        # Save to session_state so we skip this block on the next refresh
-                        st.session_state.loaded_recipes[ext_id] = final_meal
-                        st.rerun() # Reload the script to render the full view immediately
-                        
-        return # STOP! Stop execution here to prevent rendering missing data.
+                        # Store in session cache to avoid re-fetching
+                        st.session_state.loaded_recipes[cache_key] = final_meal
+                        st.rerun() # Refresh UI to show full details
+        return
 
     # --- FULL DETAILS RENDERING ---
-    # If code reaches here, data is loaded and cached.
-    
-    # 2. Normalize Variables (Backend vs TheMealDB)
+    # 2. VARIABLE NORMALIZATION
+    # Aligning field names from different sources (DB vs External API)
     name = meal.get("name") or meal.get("strMeal")
     category = meal.get("category") or meal.get("strCategory")
     area = meal.get("area") or meal.get("strArea")
     thumb = meal.get("image") or meal.get("strMealThumb")
     
+    # Format instructions for better readability in Streamlit
     raw_instructions = meal.get("instructions") or meal.get("strInstructions") or "No instructions available."
-    # Fix formatting for readability
     instructions = raw_instructions.replace("\r\n", "\n\n").replace("\n", "\n\n")
 
-    # 3. Visual Layout 
+    # 3. VISUAL LAYOUT
     c_img, c_desc = st.columns([1, 2])
     with c_img:
         if thumb:
-            st.image(thumb, width="stretch") 
+            st.image(thumb, use_container_width=True) 
         
         st.markdown("**Ingredients:**")
+        # get_ingredients_list is already designed to handle both list and strIngredientX formats
         for line in get_ingredients_list(meal):
             st.markdown(f"<small>{line}</small>", unsafe_allow_html=True)
             
     with c_desc:
         st.subheader(name)
-        st.caption(f"Category: {category} | Area: {area}")
+        st.caption(f"Category: {category} | Area: {area} | Source: {'🌐 External' if is_external else '🏠 Community'}")
         st.write(instructions)
 
-    # 4. Review Component (Loaded only after the recipe details are confirmed)
+    # 4. REVIEW COMPONENT
     st.divider()
-    render_reviews_section(external_id=ext_id, recipe_name=name)
+    
+    # For external recipes, the review system will handle "Shadow Import" automatically
+    if is_external:
+        render_reviews_section(external_id=item_id, recipe_name=name)
+    else:
+        # For internal recipes, we pass the direct primary key from our DB
+        render_reviews_section(recipe_id=int(item_id), recipe_name=name)

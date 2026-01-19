@@ -16,3 +16,6 @@ async def create(recipe: RecipeCreate, service: RecipeService = Depends(get_reci
 async def get_user_recipes(user_id: int, service: RecipeService = Depends(get_recipe_service)):
     return service.get_user_recipes(user_id)
 
+@router.get("/recipes/search")
+async def search_recipes(q: str, service: RecipeService = Depends(get_recipe_service)):
+    return service.search(q)
