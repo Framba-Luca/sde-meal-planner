@@ -1,42 +1,31 @@
-from typing import List, Dict
-from fastapi import APIRouter, HTTPException, status, Depends
-from src.schemas.review import ReviewCreate, ReviewResponse
+from typing import List
+from fastapi import APIRouter, HTTPException, Depends
 from src.services.review_service import ReviewService
-from src.api.deps import verify_internal_service_token
+# NESSUN BaseInternalClient qui!
 
 router = APIRouter()
 review_service = ReviewService()
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_review(
-    review: ReviewCreate,
-    token_payload: Dict = Depends(verify_internal_service_token)
-):
-    """
-    Saves a review in the DB.
-    Return only the ID to keep it fast.
-    """
-    review_id = review_service.create_review(
-        review.user_id, 
-        review.recipe_id, 
-        review.rating, 
-        review.comment
+@router.post("/", status_code=201)
+async def create_review(payload: dict):
+    result = review_service.create_review(
+        user_id=payload['user_id'],
+        recipe_id=payload.get('recipe_id'),
+        external_id=payload.get('external_id'),
+        rating=payload['rating'],
+        comment=payload.get('comment')
     )
-    
-    if not review_id:
-        raise HTTPException(status_code=500, detail="Failed to save review")
-        
-    return {"id": review_id, "status": "created"}
+    if not result:
+        raise HTTPException(status_code=500, detail="Errore inserimento DB")
+    return {"id": result}
 
-# QUI LA MODIFICA IMPORTANTE:
-@router.get("/recipe/{recipe_id}", response_model=List[ReviewResponse]) 
-async def get_reviews_by_recipe(
-    recipe_id: int,
-    token_payload: Dict = Depends(verify_internal_service_token)
-):
-    """
-    Obtains all the reviews for a specific recipe.
-    """
-    reviews = review_service.get_reviews_by_recipe(recipe_id)
-    
-    return reviews
+@router.get("/recipe/{recipe_id}")
+async def get_reviews(recipe_id: int):
+    return review_service.get_reviews_by_recipe(recipe_id)
+
+@router.delete("/{review_id}")
+async def delete_review(review_id: int):
+    success = review_service.delete_review_raw(review_id)
+    if not success:
+         raise HTTPException(status_code=404, detail="Review not found")
+    return {"status": "deleted"}

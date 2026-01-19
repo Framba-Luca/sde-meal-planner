@@ -14,15 +14,18 @@ recipes_fetch = RecipesFetchService()
 
 # Pydantic models
 class RecipeResponse(BaseModel):
-    id: int
     name: str
-    category: str
-    area: str
-    instructions: str
-    image: str
-    tags: str
-    youtube: str
-    ingredients: List[dict]
+    id_recipe: Optional[int] = None
+    id_external: str
+    is_external: bool
+
+    category: Optional[str] = ""
+    area: Optional[str] = ""
+    instructions: Optional[str] = ""
+    image: Optional[str] = ""
+    tags: Optional[str] = ""
+    youtube: Optional[str] = ""
+    ingredients: Optional[List[dict]] = []
 
 
 # Endpoints
@@ -43,7 +46,7 @@ async def search_by_name(name: str):
     """Search for recipes by name"""
     meals = recipes_fetch.search_by_name(name)
     if meals:
-        return {"count": len(meals), "meals": meals}
+        return {"count": len(meals), "meals": [recipes_fetch.format_recipe(m) for m in meals]}
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="No recipes found with this name"
@@ -54,18 +57,11 @@ async def search_by_name(name: str):
 async def search_by_letter(letter: str):
     """Search for recipes by first letter"""
     if len(letter) != 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Letter must be a single character"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Letter must be a single character")
     meals = recipes_fetch.search_by_first_letter(letter)
     if meals:
-        return {"count": len(meals), "meals": meals}
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipes found starting with this letter"
-    )
+        return {"count": len(meals), "meals": [recipes_fetch.format_recipe(m) for m in meals]}
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No recipes found")
 
 
 @app.get("/recipe/{recipe_id}", response_model=RecipeResponse)
@@ -73,23 +69,27 @@ async def get_recipe_by_id(recipe_id: int):
     """Get a recipe by its ID"""
     recipe = recipes_fetch.lookup_by_id(recipe_id)
     if recipe:
-        return RecipeResponse(**recipes_fetch.format_recipe(recipe))
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Recipe not found"
-    )
+        return recipes_fetch.format_recipe(recipe)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
 
+@app.get("/lookup/{id}")
+async def lookup_by_id_raw(id: str):
+    """
+    Get RAW details of a specific recipe by ID.
+    Used by Interaction Service for Shadow Recipe import.
+    """
+    meal = recipes_fetch.lookup_by_id(id)
+    if meal:
+        return meal
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
 
 @app.get("/random", response_model=RecipeResponse)
 async def get_random_recipe():
     """Get a random recipe"""
     recipe = recipes_fetch.lookup_random()
     if recipe:
-        return RecipeResponse(**recipes_fetch.format_recipe(recipe))
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipe found"
-    )
+        return recipes_fetch.format_recipe(recipe)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No recipe found")
 
 
 @app.get("/random/{count}")
@@ -103,7 +103,7 @@ async def get_multiple_random_recipes(count: int):
     
     recipes = recipes_fetch.get_multiple_random_recipes(count)
     if recipes:
-        return {"count": len(recipes), "recipes": recipes}
+        return {"count": len(recipes), "recipes": [recipes_fetch.format_recipe(m) for m in recipes]}
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="No recipes found"
@@ -127,11 +127,8 @@ async def filter_by_category(category: str):
     """Filter recipes by category"""
     meals = recipes_fetch.filter_by_category(category)
     if meals:
-        return {"count": len(meals), "meals": meals}
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipes found in this category"
-    )
+        return {"count": len(meals), "meals": [recipes_fetch.format_recipe(m) for m in meals]}
+    raise HTTPException( status_code=status.HTTP_404_NOT_FOUND, detail="No recipes found in this category" )
 
 
 @app.get("/areas")
@@ -140,10 +137,7 @@ async def get_areas():
     areas = recipes_fetch.list_all_areas()
     if areas:
         return {"count": len(areas), "areas": areas}
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No areas found"
-    )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No areas found" )
 
 
 @app.get("/filter/area/{area}")
@@ -151,7 +145,7 @@ async def filter_by_area(area: str):
     """Filter recipes by area (cuisine)"""
     meals = recipes_fetch.filter_by_area(area)
     if meals:
-        return {"count": len(meals), "meals": meals}
+        return {"count": len(meals), "meals": [recipes_fetch.format_recipe(m) for m in meals]}
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="No recipes found in this area"
@@ -175,7 +169,7 @@ async def filter_by_ingredient(ingredient: str):
     """Filter recipes by ingredient"""
     meals = recipes_fetch.filter_by_ingredient(ingredient)
     if meals:
-        return {"count": len(meals), "meals": meals}
+        return {"count": len(meals), "meals": [recipes_fetch.format_recipe(m) for m in meals]}
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="No recipes found with this ingredient"

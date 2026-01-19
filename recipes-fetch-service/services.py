@@ -3,16 +3,20 @@ Recipes Fetch Service - Fetches recipes from TheMealDB API
 """
 from typing import Dict, Any, List, Optional
 import requests
+import redis
+import json
 
 # TheMealDB API base URL
 THEMEALDB_API_URL = "https://www.themealdb.com/api/json/v1/1"
-
+REDIS_HOST: str = "redis"
+REDIS_PORT: int = 6379
 
 class RecipesFetchService:
     """Service for fetching recipes from TheMealDB"""
     
     def __init__(self):
         self.api_url = THEMEALDB_API_URL
+        self.cache = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     
     def _make_request(self, endpoint: str) -> Optional[Dict[str, Any]]:
         """Make a request to TheMealDB API"""
@@ -26,73 +30,63 @@ class RecipesFetchService:
     
     def search_by_name(self, name: str) -> Optional[List[Dict[str, Any]]]:
         """Search for recipes by name"""
-        result = self._make_request(f"search.php?s={name}")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
-    
+        result = self._make_request(f"search.php?f={name}")
+        return result.get("meals") if result else None
+        
     def search_by_first_letter(self, letter: str) -> Optional[List[Dict[str, Any]]]:
         """Search for recipes by first letter"""
-        result = self._make_request(f"search.php?f={letter}")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
+        result = self._make_request(f"lookup.php?i={letter}")
+        return result["meals"][0] if result and result.get("meals") else None
     
-    def lookup_by_id(self, meal_id: int) -> Optional[Dict[str, Any]]:
+    def lookup_by_id(self, meal_id: Any) -> Optional[Dict[str, Any]]:
         """Lookup a recipe by ID"""
+        cache_key = f"recipe:external:{meal_id}"
+        cached = self.cache.get(cache_key)
+        if cached:
+            return json.loads(cached)
+        
         result = self._make_request(f"lookup.php?i={meal_id}")
-        if result and "meals" in result and result["meals"]:
-            return result["meals"][0]
+        if result and result.get("meals"):
+            recipe = result["meals"][0]
+            # 3. Salva in Redis (es. scadenza 24h)
+            self.cache.setex(cache_key, 86400, json.dumps(recipe))
+            return recipe
         return None
     
     def lookup_random(self) -> Optional[Dict[str, Any]]:
         """Lookup a random recipe"""
         result = self._make_request("random.php")
-        if result and "meals" in result and result["meals"]:
-            return result["meals"][0]
-        return None
+        return result["meals"][0] if result and result.get("meals") else None
     
     def list_all_categories(self) -> Optional[List[Dict[str, Any]]]:
         """List all meal categories"""
         result = self._make_request("categories.php")
-        if result and "categories" in result:
-            return result["categories"]
-        return None
-    
-    def filter_by_category(self, category: str) -> Optional[List[Dict[str, Any]]]:
-        """Filter recipes by category"""
-        result = self._make_request(f"filter.php?c={category}")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
+        return result.get("categories") if result else None
     
     def list_all_areas(self) -> Optional[List[Dict[str, Any]]]:
         """List all meal areas (cuisines)"""
         result = self._make_request("list.php?a=list")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
-    
-    def filter_by_area(self, area: str) -> Optional[List[Dict[str, Any]]]:
-        """Filter recipes by area (cuisine)"""
-        result = self._make_request(f"filter.php?a={area}")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
+        return result.get("meals") if result else None
     
     def list_all_ingredients(self) -> Optional[List[Dict[str, Any]]]:
         """List all ingredients"""
         result = self._make_request("list.php?i=list")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
+        return result.get("meals") if result else None
+
+    def filter_by_category(self, category: str) -> Optional[List[Dict[str, Any]]]:
+        """Filter recipes by category"""
+        result = self._make_request(f"filter.php?c={category}")
+        return result.get("meals") if result else None
+    
+    def filter_by_area(self, area: str) -> Optional[List[Dict[str, Any]]]:
+        """Filter recipes by area (cuisine)"""
+        result = self._make_request(f"filter.php?a={area}")
+        return result.get("meals") if result else None
     
     def filter_by_ingredient(self, ingredient: str) -> Optional[List[Dict[str, Any]]]:
         """Filter recipes by ingredient"""
         result = self._make_request(f"filter.php?i={ingredient}")
-        if result and "meals" in result:
-            return result["meals"]
-        return None
+        return result.get("meals") if result else None
     
     def parse_recipe_ingredients(self, recipe: Dict[str, Any]) -> List[Dict[str, str]]:
         """
@@ -105,20 +99,11 @@ class RecipesFetchService:
             List of dictionaries with 'ingredient' and 'measure' keys
         """
         ingredients = []
-        
-        for i in range(1, 21):  # TheMealDB supports up to 20 ingredients
-            ingredient_key = f"strIngredient{i}"
-            measure_key = f"strMeasure{i}"
-            
-            ingredient = (recipe.get(ingredient_key) or "").strip()
-            measure = (recipe.get(measure_key, "")).strip()
-            
-            if ingredient:
-                ingredients.append({
-                    "ingredient": ingredient,
-                    "measure": measure
-                })
-        
+        for i in range(1, 21):
+            ing = (recipe.get(f"strIngredient{i}") or "").strip()
+            meas = (recipe.get(f"strMeasure{i}") or "").strip()
+            if ing:
+                ingredients.append({"ingredient": ing, "measure": meas})
         return ingredients
     
     def format_recipe(self, recipe: Dict[str, Any]) -> Dict[str, Any]:
@@ -132,9 +117,11 @@ class RecipesFetchService:
             Formatted recipe dictionary
         """
         return {
-            # Pydantic convertirà automaticamente la stringa ID in int
-            "id": recipe.get("idMeal"),
             "name": recipe.get("strMeal"),
+            "id_recipe": None,
+            "id_external": recipe.get("idMeal"),
+            "is_external": True,
+
             "category": recipe.get("strCategory"),
             "area": recipe.get("strArea"),
             "instructions": recipe.get("strInstructions"),

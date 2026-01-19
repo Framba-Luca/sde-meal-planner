@@ -3,7 +3,7 @@ from src.core.database import db_adapter
 from datetime import datetime
 
 class ReviewService:
-    
+
     def create_review(self, user_id: int, recipe_id: int, rating: int, comment: str) -> Optional[int]:
         query = """
             INSERT INTO reviews (user_id, recipe_id, rating, comment, created_at)
@@ -30,6 +30,19 @@ class ReviewService:
         with db_adapter.get_cursor() as cur:
             cur.execute(query, (recipe_id,))
             return cur.fetchall()
+
+    def get_review_by_id(self, review_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves a single review
+        """
+        query = """
+            SELECT * 
+            FROM reviews
+            WHERE id = %s
+        """
+        with db_adapter.get_cursor() as cur:
+            cur.execute(query, (review_id,))
+            return cur.fetchone()
 
     def delete_review(self, review_id: int) -> bool:
         query = "DELETE FROM reviews WHERE id = %s"

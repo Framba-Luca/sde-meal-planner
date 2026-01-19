@@ -1,24 +1,22 @@
 import requests
-from typing import Dict, Optional
+from typing import Dict, Optional, Any, List
 from src.core.config import settings
+from src.services.base_client import BaseInternalClient
+import json
+import redis
 
-class RecipeService:
+class RecipeService(BaseInternalClient):
+
     def __init__(self):
-        self.headers = {"Authorization": f"Bearer {settings.INTERNAL_SERVICE_SECRET}"}
-
-    def _req(self, method: str, url: str, data: Optional[Dict] = None):
-        try:
-            if method == "GET": r = requests.get(url, headers=self.headers)
-            elif method == "POST": r = requests.post(url, json=data, headers=self.headers)
-            elif method == "PUT": r = requests.put(url, json=data, headers=self.headers)
-            elif method == "DELETE": r = requests.delete(url, headers=self.headers)
-            else: return None
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            print(f"Error calling {url}: {e}")
-            return None
-
+        super().__init__()
+        self.cache = redis.Redis(
+            host=settings.REDIS_HOST, 
+            port=settings.REDIS_PORT, 
+            decode_responses=True
+        )
+        self.fetch_service_url = settings.RECIPES_FETCH_SERVICE_URL
+        self.db_service_url = f"{settings.DATABASE_SERVICE_URL}{settings.API_V1_STR}"
+        
     def get_user_recipes(self, user_id: int):
         return self._req("GET", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/user/{user_id}") or []
 
@@ -35,28 +33,69 @@ class RecipeService:
     def delete_recipe(self, recipe_id: int):
         return self._req("DELETE", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/{recipe_id}")
 
-    # --- Shadow Logic ---
+    def get_recipe_details(self, external_id: str) -> Optional[Dict[str, Any]]:
+        resp = requests.get(f"{self.fetch_service_url}/recipe/{external_id}")
+        return resp.json() if resp.status_code == 200 else None
+    
     def ensure_shadow_recipe(self, external_id: str) -> Optional[int]:
-        # 1. Check DB
-        existing = self._req("GET", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/external/{external_id}")
-        if existing and existing.get('id'): return existing['id']
+        """
+        Transform an external recipe into a shadow one 
+        """
+        check = self._req("GET", f"{self.db_service_url}/recipes/external/{external_id}")
+        
+        if check and "id" in check:
+            return check["id"]
 
-        # 2. Fetch External
-        try:
-            fetch_url = f"{settings.RECIPES_FETCH_SERVICE_URL}/recipe/{external_id}"
-            resp = requests.get(fetch_url) # Internal service, direct call
-            if resp.status_code == 404: return None
-            data = resp.json()
-            if "meals" in data and data["meals"]: data = data["meals"][0]
-        except Exception: return None
-
-        # 3. Create Shadow
+        ext_data = requests.get(f"{self.fetch_service_url}/lookup/{external_id}").json()
+        
         payload = {
-            "name": data.get('name') or data.get('strMeal'),
-            "image": data.get('image') or data.get('strMealThumb'),
-            "external_id": str(external_id),
-            "category": data.get('category') or data.get('strCategory'),
-            "area": data.get('area') or data.get('strArea')
+            "external_id": external_id,
+            "name": ext_data['meals'][0]['strMeal'],
+            "category": ext_data['meals'][0].get('strCategory')
         }
-        res = self._req("POST", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/shadow", payload)
-        return res['id'] if res else None
+        new_recipe = self._req("POST", f"{self.db_service_url}/recipes/shadow", json=payload)
+        return new_recipe.get("id")
+        
+    def search_unified(self, query: str) -> List[Dict[str, Any]]:
+        
+        results = []
+        known_external_ids = set()
+
+        try:
+            internal_resp = self._req("GET", f"{self.db_service_url}/recipes/search", params={"q": query})
+            internal_data = internal_resp if isinstance(internal_resp, list) else []
+
+            for r in internal_data:
+                if r.get("external_id"):
+                    known_external_ids.add(str(r["external_id"]))
+
+                results.append({
+                    "name": r.get("name"),
+                    "id_recipe": r.get("id"),
+                    "id_external": r.get("external_id"),
+                    "is_external": False
+                })
+        except Exception as e:
+            print(f"Internal Search Error: {e}")
+
+        try:
+            ext_resp = requests.get(f"{self.fetch_service_url}/search/name/{query}", timeout=5)
+            if ext_resp.status_code == 200:
+                ext_data = ext_resp.json().get("meals", [])
+                
+                for m in ext_data:
+                    ext_id = str(m.get("id_external"))
+
+                    if ext_id in known_external_ids:
+                        continue
+
+                    results.append({
+                        "name": m.get("nome"),
+                        "id_recipe": None,
+                        "id_esterno": ext_id,
+                        "is_external": True
+                    })
+        except Exception as e:
+            print(f"External Search Error: {e}")
+
+        return results
