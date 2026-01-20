@@ -1,25 +1,40 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
-class RecipeBase(BaseModel):
+# -------------------------------------------------
+# CORE FIELDS (shared across all recipe schemas)
+# -------------------------------------------------
+
+class RecipeCore(BaseModel):
     name: str
-    description: Optional[str] = None
-    instructions: Optional[str] = None
-    image: Optional[str] = ""
-    category: Optional[str] = None
-    area: Optional[str] = None
-    ingredients: Optional[List[Dict[str, Any]]] = []
-
-class RecipeCreate(RecipeBase):
-    user_id: int 
-
-class RecipeUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
     instructions: Optional[str] = None
     image: Optional[str] = None
+    category: Optional[str] = None
+    area: Optional[str] = None
 
-class RecipeResponse(RecipeBase):
+
+# -------------------------------------------------
+# INPUT SCHEMAS
+# -------------------------------------------------
+
+class RecipeCreate(RecipeCore):
+    user_id: int
+    ingredients: List[Dict[str, Any]] = []
+
+
+class RecipeUpdate(RecipeCore):
+    name: Optional[str] = None
+    instructions: Optional[str] = None
+    image: Optional[str] = None
+    category: Optional[str] = None
+    area: Optional[str] = None
+
+
+# -------------------------------------------------
+# OUTPUT SCHEMAS (DB)
+# -------------------------------------------------
+
+class RecipeResponse(RecipeCore):
     id: int
     user_id: int
     external_id: Optional[str] = None
@@ -27,3 +42,14 @@ class RecipeResponse(RecipeBase):
 
     class Config:
         from_attributes = True
+
+
+# -------------------------------------------------
+# UNIFIED SEARCH RESPONSE (internal + external)
+# -------------------------------------------------
+
+class RecipeUnifiedResponse(RecipeCore):
+    id: Optional[int] = None
+    external_id: Optional[str] = None
+    is_custom: bool
+    source: str = "internal"

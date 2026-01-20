@@ -38,6 +38,19 @@ async def create_review(
     )
     return service.get_review_by_id(review_id)
 
+@router.get("/{review_id}", response_model=ReviewResponse)
+async def get_review(
+    review_id: int,
+    service: ReviewService = Depends(get_review_service)
+):
+    """
+    Retrieves a single review by ID.
+    Essential for 'recipe-crud-interaction' to check ownership before deletion.
+    """
+    review = service.get_review_by_id(review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return review
 
 @router.get("/external/{external_id}", response_model=List[ReviewResponse])
 async def get_reviews_by_external_id(

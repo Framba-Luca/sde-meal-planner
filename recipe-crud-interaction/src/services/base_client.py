@@ -1,5 +1,5 @@
 import requests
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 from src.core.config import settings
 
 class BaseInternalClient:

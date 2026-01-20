@@ -13,6 +13,7 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     created_at: str | datetime
+    hashed_password: str
 
     class Config:
         from_attributes = True

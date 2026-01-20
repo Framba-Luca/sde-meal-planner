@@ -9,11 +9,16 @@ class ReviewService(BaseInternalClient):
         super().__init__()
         # Recipe Service to handle the Shadow Recipes
         self.recipe_service = RecipeService()
+        self.db_service_url = f"{settings.DATABASE_SERVICE_URL}{settings.API_V1_STR}"
 
     def get_reviews(self, recipe_id: int):
         """To obtain the reviews from the DB Service"""
-        url = f"{settings.DATABASE_SERVICE_URL}{settings.API_V1_STR}/reviews/recipe/{recipe_id}"
+        url = f"{self.db_service_url}/reviews/recipe/{recipe_id}"
         return self._req("GET", url) or []
+    
+    def get_review_by_id(self, review_id: int) -> Optional[Dict[str, Any]]:
+        """Retireve a review to check its existence"""
+        return self._req("GET", f"{self.db_service_url}/reviews/{review_id}")
 
     def create_review(self, user_id: int, data: Dict[str, Any]):
         """
@@ -30,7 +35,7 @@ class ReviewService(BaseInternalClient):
             rid = self.recipe_service.ensure_shadow_recipe(ext_id)
         
         if not rid:
-            return {"error": "Impossibile trovare la ricetta specificata (Shadow Import fallito)."}
+            return {"error": "Recipe not found (Shadow Import failed)."}
 
         # Construct the payload for the database service
         payload = {
@@ -40,17 +45,33 @@ class ReviewService(BaseInternalClient):
             "comment": data.get('comment')
         }
         
-        url = f"{settings.DATABASE_SERVICE_URL}{settings.API_V1_STR}/reviews/"
+        url = f"{self.db_service_url}/reviews/"
         result = self._req("POST", url, json=payload)
         
         return result if result else {"error": "Errore salvataggio DB"}
 
-    def delete_review(self, review_id: int, current_user_id: int) -> bool:
+    def delete_review(self, user_id: int, review_id: int) -> Dict[str, Any]:
         """
         Delete the reviews
         IMPORTANTE: Verifica prima che la recensione appartenga all'utente corrente.
         """
-        url = f"{settings.DATABASE_SERVICE_URL}{settings.API_V1_STR}/reviews/{review_id}"
+        review = self.get_review_by_id(review_id)
         
-        res = self._req("DELETE", url)
-        return res is not None
+        if not review:
+            return {"error": "Review not found", "code": 404}
+
+        # Is user the owrer of review?
+        if int(review.get("user_id")) == int(user_id):
+            # Yeah
+            return self._req("DELETE", f"{self.db_service_url}/reviews/{review_id}")
+
+        # Is user owner of recipe?
+        recipe_id = review.get("recipe_id")
+        recipe = self.recipe_service.get_recipe(recipe_id)
+        
+        if recipe and int(recipe.get("user_id")) == int(user_id):
+            # Yeah, the user can moderate the reviews
+            return self._req("DELETE", f"{self.db_service_url}/reviews/{review_id}")
+
+        # If we arrive here the user doesn't have any rights off ownership
+        return {"error": "Permission denied. You are not the review author nor the recipe owner.", "code": 403}

@@ -42,9 +42,11 @@ async def delete_review(
     """
     Deletes a review
     """
-    success = service.delete_review(review_id, current_user_id)
+
+    result = service.delete_review(current_user_id, review_id)
     
-    if not success:
-        raise HTTPException(status_code=400, detail="Impossible to delete the review")
+    if isinstance(result, dict) and "error" in result:
+        code = result.get("code", 400)
+        raise HTTPException(status_code=code, detail=result["error"])
         
     return {"status": "success", "message": "Review deleted"}

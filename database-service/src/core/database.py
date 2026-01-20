@@ -1,9 +1,10 @@
 from sqlmodel import SQLModel, create_engine, Session
 from src.core.config import settings
 from typing import Generator
+import os
 
 DATABASE_URL = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=os.getenv("DEBUG", True))
 
 def init_db():
     """

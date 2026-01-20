@@ -10,11 +10,6 @@ from src.core.config import settings
 from src.core.database import init_db
 from src.api.v1.router import api_router
 
-from src.models.user_model import User
-from src.models.recipe_model import Recipe, RecipeIngredient
-from src.models.review_model import Review
-from src.models.meal_model import MealPlan, MealPlanItem
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """

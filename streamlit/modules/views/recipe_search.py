@@ -47,13 +47,13 @@ def _render_search_filters():
         if search_type == "Name":
             query = st.text_input("Recipe Name", placeholder="e.g. Lasagna")
             if st.button("Search", key="s_name") and query:
-                raw_response = make_request(f"{RECIPES_FETCH_URL}/search/name/{query}")
+                raw_response = make_request(f"{RECIPE_CRUD_URL}/search/{query}")
                 search_triggered = True
 
         elif search_type == "Ingredient":
             query = st.text_input("Ingredient", placeholder="e.g. Garlic")
             if st.button("Search", key="s_ing") and query:
-                raw_response = make_request(f"{RECIPES_FETCH_URL}/filter/ingredient/{query}")
+                raw_response = make_request(f"{RECIPE_CRUD_URL}/search/{query}")
                 search_triggered = True
 
         elif search_type == "Category":
@@ -155,20 +155,14 @@ def _render_single_recipe_detail(item_id, partial_data, is_external=False):
             # Show thumbnail from search results while loading
             thumb = meal.get("image") or meal.get("strMealThumb")
             if thumb:
-                st.image(thumb, use_container_width=True)
+                st.image(thumb, width="stretch")
         with c2:
             st.info(f"Details for {'External' if is_external else 'Custom'} recipe not loaded.")
             
             # API call happens ONLY when this specific button is clicked
             if st.button("📥 Load Details & Reviews", key=f"load_{cache_key}"):
                 with st.spinner("Fetching data..."):
-                    # ROUTING LOGIC:
-                    # External recipes -> recipes-fetch-service
-                    # Custom recipes -> recipe-crud-interaction (orchestrator)
-                    if is_external:
-                        url = f"{RECIPES_FETCH_URL}/recipe/{item_id}"
-                    else:
-                        url = f"{RECIPE_CRUD_URL}/api/v1/recipes/{item_id}"
+                    url = f"{RECIPE_CRUD_URL}/api/v1/recipes/{item_id}"
                     
                     full = make_request(url)
                     
@@ -197,7 +191,7 @@ def _render_single_recipe_detail(item_id, partial_data, is_external=False):
     c_img, c_desc = st.columns([1, 2])
     with c_img:
         if thumb:
-            st.image(thumb, use_container_width=True) 
+            st.image(thumb, width="stretch") 
         
         st.markdown("**Ingredients:**")
         # get_ingredients_list is already designed to handle both list and strIngredientX formats

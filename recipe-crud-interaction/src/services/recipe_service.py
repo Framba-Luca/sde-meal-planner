@@ -22,20 +22,40 @@ class RecipeService(BaseInternalClient):
 
     def create_recipe(self, user_id: int, data: Dict):
         url = f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes"
+        # Assicuriamoci che l'user_id sia nel payload
         return self._req("POST", url, {"user_id": user_id, **data})
 
     def get_recipe(self, recipe_id: int):
         return self._req("GET", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/{recipe_id}")
 
-    def update_recipe(self, recipe_id: int, data: Dict):
-        return self._req("PUT", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/{recipe_id}", data)
+    def update_recipe(self, user_id: int, recipe_id: int, data: Dict) -> Dict[str, Any]:
+        existing_recipe = self.get_recipe(recipe_id)
+        
+        if not existing_recipe:
+            return {"error": "Recipe not found", "code": 404}
+        
+        if int(existing_recipe.get("user_id")) != int(user_id):
+            return {"error": "Permission denied. You do not own this recipe.", "code": 403}
 
-    def delete_recipe(self, recipe_id: int):
-        return self._req("DELETE", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/{recipe_id}")
+        return self._req("PUT", f"{self.db_service_url}/recipes/{recipe_id}", data)
 
+    def delete_recipe(self, user_id: int, recipe_id: int) -> Dict[str, Any]:
+        existing_recipe = self.get_recipe(recipe_id)
+        
+        if not existing_recipe:
+            return {"error": "Recipe not found", "code": 404}
+            
+        if int(existing_recipe.get("user_id")) != int(user_id):
+            return {"error": "Permission denied. You do not own this recipe.", "code": 403}
+
+        return self._req("DELETE", f"{self.db_service_url}/recipes/{recipe_id}")
+    
     def get_recipe_details(self, external_id: str) -> Optional[Dict[str, Any]]:
-        resp = requests.get(f"{self.fetch_service_url}/recipe/{external_id}")
-        return resp.json() if resp.status_code == 200 else None
+        try:
+            resp = requests.get(f"{self.fetch_service_url}/recipe/{external_id}", timeout=5)
+            return resp.json() if resp.status_code == 200 else None
+        except Exception:
+            return None
     
     def ensure_shadow_recipe(self, external_id: str) -> Optional[int]:
         """
@@ -56,13 +76,27 @@ class RecipeService(BaseInternalClient):
         new_recipe = self._req("POST", f"{self.db_service_url}/recipes/shadow", json=payload)
         return new_recipe.get("id")
         
-    def search_unified(self, query: str) -> List[Dict[str, Any]]:
+    def search_unified(
+        self, 
+        query: Optional[str] = None,
+        category: Optional[str] = None,
+        area: Optional[str] = None,
+        ingredient: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         
         results = []
         known_external_ids = set()
 
+        # 1. INTERNAL DB SEARCH
+        # ---------------------
+        db_params = {}
+        if query: db_params["q"] = query
+        if category: db_params["category"] = category
+        if area: db_params["area"] = area
+        if ingredient: db_params["ingredient"] = ingredient
+
         try:
-            internal_resp = self._req("GET", f"{self.db_service_url}/recipes/search", params={"q": query})
+            internal_resp = self._req("GET", f"{self.db_service_url}/recipes/search", params=db_params)
             internal_data = internal_resp if isinstance(internal_resp, list) else []
 
             for r in internal_data:
@@ -70,32 +104,61 @@ class RecipeService(BaseInternalClient):
                     known_external_ids.add(str(r["external_id"]))
 
                 results.append({
+                    "id": r.get("id"),
+                    "external_id": r.get("external_id"),
                     "name": r.get("name"),
-                    "id_recipe": r.get("id"),
-                    "id_external": r.get("external_id"),
-                    "is_external": False
+                    "image": r.get("image"),
+                    "category": r.get("category"),
+                    "area": r.get("area"),
+                    "instructions": r.get("instructions"),
+                    "is_custom": r.get("is_custom", True),
+                    "source": "internal"
                 })
         except Exception as e:
-            print(f"Internal Search Error: {e}")
+            print(f"⚠️ Internal Search Error: {e}")
 
-        try:
-            ext_resp = requests.get(f"{self.fetch_service_url}/search/name/{query}", timeout=5)
-            if ext_resp.status_code == 200:
-                ext_data = ext_resp.json().get("meals", [])
+        # 2. EXTERNAL SEARCH (TheMealDB)
+        # ------------------------------
+        ext_endpoint = ""
+        
+        if query:
+            ext_endpoint = f"/search/name/{query}"
+        elif ingredient:
+            ext_endpoint = f"/filter?i={ingredient}"
+        elif category:
+            ext_endpoint = f"/filter?c={category}"
+        elif area:
+            ext_endpoint = f"/filter?a={area}"
+            
+        if ext_endpoint:
+            try:
+                url = f"{self.fetch_service_url}{ext_endpoint}"
+                ext_resp = requests.get(url, timeout=5)
                 
-                for m in ext_data:
-                    ext_id = str(m.get("id_external"))
+                if ext_resp.status_code == 200:
+                    data = ext_resp.json()
+                    meals = data.get("meals") or []
+                    
+                    for m in meals:
+                        ext_id = str(m.get("idMeal"))
+                        if ext_id in known_external_ids:
+                            continue
 
-                    if ext_id in known_external_ids:
-                        continue
+                        res_category = m.get("strCategory") or category
+                        res_area = m.get("strArea") or area
 
-                    results.append({
-                        "name": m.get("nome"),
-                        "id_recipe": None,
-                        "id_esterno": ext_id,
-                        "is_external": True
-                    })
-        except Exception as e:
-            print(f"External Search Error: {e}")
+                        results.append({
+                            "id": None,
+                            "external_id": ext_id,
+                            "name": m.get("strMeal"),
+                            "image": m.get("strMealThumb"),
+                            "category": res_category,
+                            "area": res_area,
+                            "instructions": m.get("strInstructions"),
+                            "is_custom": False,
+                            "source": "external"
+                        })
+            except Exception as e:
+                print(f"⚠️ External Search Error: {e}")
 
         return results
