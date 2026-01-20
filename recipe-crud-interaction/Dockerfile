@@ -6,10 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY ./shared-lib /tmp/shared-lib
+RUN pip install /tmp/shared-lib
+
+COPY ./recipe-crud-interaction/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY ./recipe-crud-interaction .
 
 EXPOSE 8005
 
