@@ -1,3 +1,4 @@
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -6,13 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY ./shared-lib /tmp/shared-lib
-RUN pip install /tmp/shared-lib
-
-COPY ./authentication/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./authentication .
+COPY . .
 
 EXPOSE 8001
 

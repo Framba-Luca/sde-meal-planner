@@ -37,9 +37,7 @@ services:
 
   # Authentication Service
   authentication:
-    build:
-      context: .
-      dockerfile: ./authentication/Dockerfile
+    build: ./authentication
     container_name: authentication
     ports:
       - "8001:8001"
@@ -53,6 +51,7 @@ services:
       GOOGLE_REDIRECT_URI: http://localhost:8001/api/v1/auth/google/callback
       FRONTEND_URL: http://localhost:8501
       DEBUG_MODE: ${DEBUG_MODE:-TRUE}
+      # Added Redis for Token Blacklisting
       REDIS_HOST: redis
       REDIS_PORT: 6379
     depends_on:
@@ -65,9 +64,7 @@ services:
 
   # Database Service
   database-service:
-    build:
-      context: .
-      dockerfile: ./database-service/Dockerfile
+    build: ./database-service
     container_name: database-service
     ports:
       - "8002:8002"
@@ -90,9 +87,7 @@ services:
 
   # Meal Proposer Service
   meal-proposer:
-    build:
-      context: .
-      dockerfile: ./meal-proposer/Dockerfile
+    build: ./meal-proposer
     container_name: meal-proposer
     ports:
       - "8003:8003"
@@ -103,9 +98,7 @@ services:
 
   # Meal Planner Service
   meal-planner-pcl:
-    build:
-      context: .
-      dockerfile: ./meal-planner-pcl/Dockerfile
+    build: ./meal-planner-pcl
     container_name: meal-planner-pcl
     ports:
       - "8004:8004"
@@ -122,9 +115,7 @@ services:
 
   # Recipe CRUD Interaction Service
   recipe-crud-interaction:
-    build:
-      context: .
-      dockerfile: ./recipe-crud-interaction/Dockerfile
+    build: ./recipe-crud-interaction
     container_name: recipe-crud-interaction
     ports:
       - "8005:8005"
@@ -139,9 +130,7 @@ services:
 
   # Recipes Fetch Service
   recipes-fetch-service:
-    build:
-      context: .
-      dockerfile: ./recipes-fetch-service/Dockerfile
+    build: ./recipes-fetch-service
     container_name: recipes-fetch-service
     ports:
       - "8006:8006"
@@ -156,9 +145,7 @@ services:
 
   # Streamlit GUI
   streamlit:
-    build:
-      context: .
-      dockerfile: ./streamlit/Dockerfile
+    build: ./streamlit
     container_name: streamlit-gui
     ports:
       - "8501:8501"

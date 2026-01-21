@@ -1,18 +1,11 @@
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
-
 WORKDIR /app
 
-COPY ./shared-lib /tmp/shared-lib
-RUN pip install /tmp/shared-lib
-
-COPY ./recipes-fetch-service/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./recipes-fetch-service .
+COPY . .
 
 EXPOSE 8006
 
