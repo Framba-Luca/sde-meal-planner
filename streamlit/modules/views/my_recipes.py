@@ -1,11 +1,14 @@
 import streamlit as st
-from modules.config import RECIPE_CRUD_URL
+from modules.config import RECIPE_CRUD_URL, API_VERSION
 from modules.api import make_request
+
+recipe_url = (f"{RECIPE_CRUD_URL}/{API_VERSION}") 
 
 def render_recipe_interaction():
     """
     Main page for user's custom recipes (View / Add).
     """
+
     st.header("📝 My Recipes")
     
     tab1, tab2 = st.tabs(["View Recipes", "Add Recipe"])
@@ -26,7 +29,7 @@ def _render_view_recipes_tab():
         return
 
     # Fetch recipes from CRUD Service
-    recipes = make_request(f"{RECIPE_CRUD_URL}/recipes/user/{user_id}")
+    recipes = make_request(f"{recipe_url}/recipes/user/{user_id}")
     
     if recipes:
         for recipe in recipes:
@@ -45,7 +48,7 @@ def _render_view_recipes_tab():
                     st.write("Actions")
                     # Delete Button
                     if st.button("🗑️ Delete", key=f"del_rec_{recipe['id']}", type="secondary"):
-                        if make_request(f"{RECIPE_CRUD_URL}/recipes/{recipe['id']}", method="DELETE"):
+                        if make_request(f"{recipe_url}/recipes/{recipe['id']}", method="DELETE"):
                             st.success("Deleted!")
                             st.rerun()
     else:
@@ -88,6 +91,6 @@ def _render_add_recipe_tab():
                 "tags": tags
             }
             
-            if make_request(f"{RECIPE_CRUD_URL}/recipes", method="POST", data=payload):
+            if make_request(f"{recipe_url}/recipes/", method="POST", data=payload):
                 st.success("Recipe saved successfully!")
                 st.rerun()

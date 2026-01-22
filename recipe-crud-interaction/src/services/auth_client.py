@@ -32,5 +32,5 @@ class AuthClient:
         except requests.RequestException:
             raise HTTPException(
                 status_code=503, 
-                detail="Servizio di autenticazione non disponibile"
+                detail="Authentication Service not available"
             )
