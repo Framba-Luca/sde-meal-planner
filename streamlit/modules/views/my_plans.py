@@ -17,15 +17,15 @@ def render_my_meal_plans():
     result = make_request(f"{MEAL_PLANNER_URL}/meal-plans/user/{user_id}")
     
     if result and result.get("meal_plans"):
-        plans = result["meal_plans"]
+        plans = result.get("meal_plans")
         
         for plan in plans:
-            label = f"Plan from {plan['start_date']} to {plan['end_date']}"
+            label = f"Plan from {plan.get('start_date')} to {plan.get('end_date')}"
             with st.expander(label):
-                st.caption(f"Created at: {plan.get('created_at')} | ID: {plan['id']}")
+                st.caption(f"Created at: {plan.get('created_at')} | ID: {plan.get('id')}")
                 
                 # Fetch summary of items for preview (optional)
-                items_data = make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan['id']}/items")
+                items_data = make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan.get('id')}/items")
                 if items_data and items_data.get("items"):
                     st.write(f"Contains **{len(items_data['items'])}** meals.")
                 
@@ -33,16 +33,16 @@ def render_my_meal_plans():
                 c1, c2 = st.columns([1, 4])
                 with c1:
                     # LOAD Action
-                    if st.button("📂 Load Plan", key=f"load_p_{plan['id']}", type="primary"):
-                        full_plan = make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan['id']}/full")
+                    if st.button("📂 Load Plan", key=f"load_p_{plan.get('id')}", type="primary"):
+                        full_plan = make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan.get('id')}/full")
                         if full_plan:
                             st.session_state.current_meal_plan = full_plan
                             st.success("Plan loaded into 'Meal Planning' tab!")
                             # Optional: Redirect logic could go here if Streamlit supported simple redirects
                 with c2:
                     # DELETE Action
-                    if st.button("🗑️ Delete", key=f"del_p_{plan['id']}", type="secondary"):
-                        if make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan['id']}", method="DELETE"):
+                    if st.button("🗑️ Delete", key=f"del_p_{plan.get('id')}", type="secondary"):
+                        if make_request(f"{MEAL_PLANNER_URL}/meal-plans/{plan.get('id')}", method="DELETE"):
                             st.toast("Plan deleted.")
                             st.rerun()
     else:

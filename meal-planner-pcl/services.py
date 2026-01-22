@@ -129,7 +129,7 @@ class MealPlannerService:
         if not meal_plan:
             return None
         
-        meal_plan_id = meal_plan["id"]
+        meal_plan_id = meal_plan.get("id")
         meal_types = ["breakfast", "lunch", "dinner"]
         days_meals = {}
         
@@ -142,18 +142,21 @@ class MealPlannerService:
                 # Propose a meal for this meal type
                 meal = self.propose_meal(ingredient)
                 if meal:
-                    # Add meal to plan
-                    meal_item = self.add_meal_to_plan(
-                        meal_plan_id=meal_plan_id,
-                        mealdb_id=meal["id"],
-                        meal_date=current_date,
-                        meal_type=meal_type
-                    )
-                    
-                    day_meals[meal_type] = {
-                        "recipe": meal,
-                        "meal_plan_item_id": meal_item["id"] if meal_item else None
-                    }
+                    recipe_id = meal.get("id") or meal.get("idMeal")
+
+                    if recipe_id:
+                        # Add meal to plan
+                        meal_item = self.add_meal_to_plan(
+                            meal_plan_id=meal_plan_id,
+                            mealdb_id=meal["id"],
+                            meal_date=current_date,
+                            meal_type=meal_type
+                        )
+                        
+                        day_meals[meal_type] = {
+                            "recipe": meal,
+                            "meal_plan_item_id": meal_item["id"] if meal_item else None
+                        }
             
             days_meals[current_date.isoformat()] = day_meals
         
@@ -189,9 +192,9 @@ class MealPlannerService:
         Returns:
             List of meal plan items or None if failed
         """
-        url = f"{self.database_service_url}/api/v1/meal-plans/items/{meal_plan_id}"
+        url = f"{self.database_service_url}/api/v1/meal-plans/{meal_plan_id}/items"
         result = self._make_request(url, method="GET")
-        return result
+        return result if result is not None else []
     
     def get_user_meal_plans(self, user_id: int) -> Optional[List[Dict[str, Any]]]:
         """
@@ -276,9 +279,7 @@ class MealPlannerService:
             return None
         
         # Get meal plan items
-        items = self.get_meal_plan_items(meal_plan_id)
-        if not items:
-            return None
+        items = self.get_meal_plan_items(meal_plan_id) or []
         
         # Group items by date and meal type
         days_meals = {}
