@@ -71,7 +71,7 @@ class RecipeService:
         return db_recipe
 
     def get_custom_recipe_by_id(self, recipe_id: int) -> Optional[Recipe]:
-        statement = select(Recipe.id, Recipe.name).where(Recipe.id == recipe_id)
+        statement = select(Recipe).where(Recipe.id == recipe_id)
         return self.session.exec(statement).first()
 
     def get_recipe(
