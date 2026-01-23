@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from typing import List, Optional
 from sqlmodel import Session
 
 # Database session dependency
@@ -65,6 +65,21 @@ async def get_recipe_detail(
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
 
+@router.get("", response_model=List[CustomRecipeResponse])
+async def get_recipe_detail(
+    query: Optional[str] = None,
+    category: Optional[str] = None,
+    area: Optional[str] = None,
+    ingredient: Optional[str] = None,
+    service: RecipeService = Depends(get_recipe_service)
+):
+    """
+    Retrieves a custom by the query
+    """
+    recipe = service.get_recipe(query, category, area, ingredient)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe
 
 @router.post("/shadow", status_code=status.HTTP_200_OK)
 async def create_shadow_recipe(

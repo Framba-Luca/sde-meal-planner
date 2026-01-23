@@ -70,10 +70,35 @@ class RecipeService:
         self.session.refresh(db_recipe)
         return db_recipe
 
-    # ... (other get/delete methods remain unchanged since they were already concise) ...
-
     def get_custom_recipe_by_id(self, recipe_id: int) -> Optional[Recipe]:
-        return self.session.get(Recipe, recipe_id)
+        statement = select(Recipe.id, Recipe.name).where(Recipe.id == recipe_id)
+        return self.session.exec(statement).first()
+
+    def get_recipe(
+        self, 
+        query: Optional[str] = None, 
+        category: Optional[str] = None, 
+        area: Optional[str] = None, 
+        ingredient: Optional[str] = None
+    ) -> List[Recipe]:
+        statement = select(Recipe)
+
+        if ingredient:
+            statement = statement.join(RecipeIngredient)
+            statement = statement.where(RecipeIngredient.ingredient_name.ilike(f"%{ingredient}%"))
+
+        if query:
+            statement = statement.where(Recipe.name.ilike(f"%{query}%"))
+
+        if category:
+            statement = statement.where(Recipe.category.ilike(category))
+
+        # 4. Filtro per Area
+        if area:
+            statement = statement.where(Recipe.area.ilike(area))
+        statement = statement.distinct()
+
+        return self.session.exec(statement).all()
 
     def get_recipe_by_external_id(self, external_id: str) -> Optional[Recipe]:
         statement = select(Recipe).where(Recipe.external_id == external_id)

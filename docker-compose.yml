@@ -4,15 +4,15 @@ services:
     image: postgres:15-alpine
     container_name: meal-planner-db
     environment:
-      POSTGRES_DB: mealplanner
-      POSTGRES_USER: mealplanner
-      POSTGRES_PASSWORD: mealplanner
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mealplanner"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -42,18 +42,17 @@ services:
     ports:
       - "8001:8001"
     environment:
-      SECRET_KEY: ${SECRET_KEY:-super_secret_shared_key_change_me}
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      DATABASE_SERVICE_URL: http://database-service:8002
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: http://localhost:8001/api/v1/auth/google/callback
-      FRONTEND_URL: http://localhost:8501
-      DEBUG_MODE: ${DEBUG_MODE:-TRUE}
-      # Added Redis for Token Blacklisting
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      DATABASE_SERVICE_URL: ${DATABASE_SERVICE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      FRONTEND_URL: ${FRONTEND_URL}
+      DEBUG_MODE: ${DEBUG}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,13 +68,13 @@ services:
     ports:
       - "8002:8002"
     environment:
-      SECRET_KEY: ${SECRET_KEY:-super_secret_shared_key_change_me}
-      ALGORITHM: HS256
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: mealplanner
-      DB_USER: mealplanner
-      DB_PASSWORD: mealplanner
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
       INTERNAL_SERVICE_SECRET: internal-service-secret-key
     depends_on:
       postgres:
@@ -92,7 +91,7 @@ services:
     ports:
       - "8003:8003"
     environment:
-      SECRET_KEY: ${SECRET_KEY:-super_secret_shared_key_change_me}
+      SECRET_KEY: ${SECRET_KEY}
     networks:
       - meal-planner-network
 
@@ -103,9 +102,9 @@ services:
     ports:
       - "8004:8004"
     environment:
-      MEAL_PROPOSER_URL: http://meal-proposer:8003
-      DATABASE_SERVICE_URL: http://database-service:8002
-      SECRET_KEY: ${SECRET_KEY:-super_secret_shared_key_change_me}
+      MEAL_PROPOSER_URL: ${MEAL_PROPOSER_URL}
+      DATABASE_SERVICE_URL: ${DATABASE_SERVICE_URL}
+      SECRET_KEY: ${SECRET_KEY}
       INTERNAL_SERVICE_SECRET: internal-service-secret-key
     depends_on:
       - meal-proposer
@@ -113,31 +112,30 @@ services:
     networks:
       - meal-planner-network
 
-  # Recipe CRUD Interaction Service
   recipe-crud-interaction:
     build: ./recipe-crud-interaction
     container_name: recipe-crud-interaction
     ports:
       - "8005:8005"
     environment:
-      DATABASE_SERVICE_URL: http://database-service:8002
-      SECRET_KEY: ${SECRET_KEY:-super_secret_shared_key_change_me}
-      RECIPES_FETCH_URL: http://recipes-fetch-service:8006
+      DATABASE_SERVICE_URL: ${DATABASE_SERVICE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      RECIPES_FETCH_URL: ${RECIPES_FETCH_URL}
     depends_on:
       - database-service
+      - recipes-fetch-service
     networks:
       - meal-planner-network
 
-  # Recipes Fetch Service
   recipes-fetch-service:
     build: ./recipes-fetch-service
     container_name: recipes-fetch-service
     ports:
       - "8006:8006"
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      SECRET_KEY: ${SECRET_KEY:-super_secret_shared_key_change_me}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      SECRET_KEY: ${SECRET_KEY}
     depends_on:
       - redis
     networks:
@@ -150,12 +148,12 @@ services:
     ports:
       - "8501:8501"
     environment:
-      AUTH_SERVICE_URL: http://authentication:8001
-      DATABASE_SERVICE_URL: http://database-service:8002
-      MEAL_PROPOSER_URL: http://meal-proposer:8003
-      MEAL_PLANNER_URL: http://meal-planner-pcl:8004
-      RECIPE_CRUD_URL: http://recipe-crud-interaction:8005
-      RECIPES_FETCH_URL: http://recipes-fetch-service:8006
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      DATABASE_SERVICE_URL: ${DATABASE_SERVICE_URL}
+      MEAL_PROPOSER_URL: ${MEAL_PROPOSER_URL}
+      MEAL_PLANNER_URL: ${MEAL_PLANNER_URL}
+      RECIPE_CRUD_URL: ${RECIPE_CRUD_URL}
+      RECIPES_FETCH_URL: ${RECIPES_FETCH_URL}
     depends_on:
       - authentication
       - database-service

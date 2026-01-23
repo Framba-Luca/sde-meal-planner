@@ -25,7 +25,7 @@ class RecipesFetchService:
     
         """Make a request to TheMealDB API"""
         try:
-            response = requests.get(f"{self.api_url}/{endpoint}")
+            response = requests.get(f"{self.api_url}/{endpoint}", timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -39,7 +39,11 @@ class RecipesFetchService:
         if cached:
             return json.loads(cached)
 
-        result = self._make_request(f"search.php?f={name}")
+        if len(name) != 1:
+            result = self._make_request(f"search.php?s={name}")
+        else:
+            result = self._make_request(f"search.php?f={name}")
+
         data = result.get("meals") if result else None
         
         if data:
@@ -49,7 +53,7 @@ class RecipesFetchService:
         
     def search_by_first_letter(self, letter: str) -> Optional[List[Dict[str, Any]]]:
         """Search for recipes by first letter"""
-        result = self._make_request(f"lookup.php?i={letter}")
+        result = self._make_request(f"lookup.php?f={letter}")
         return result["meals"][0] if result and result.get("meals") else None
     
     def lookup_by_id(self, meal_id: Any) -> Optional[Dict[str, Any]]:

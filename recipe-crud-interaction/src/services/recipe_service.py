@@ -87,16 +87,17 @@ class RecipeService(BaseInternalClient):
         results = []
         known_external_ids = set()
 
+        # ---------------------------------------------------------
         # 1. INTERNAL DB SEARCH
-        # ---------------------
+        # ---------------------------------------------------------
         db_params = {}
-        if query: db_params["q"] = query
+        if query: db_params["query"] = query
         if category: db_params["category"] = category
         if area: db_params["area"] = area
         if ingredient: db_params["ingredient"] = ingredient
 
         try:
-            internal_resp = self._req("GET", f"{self.db_service_url}/recipes/search", params=db_params)
+            internal_resp = self._req("GET", f"{self.db_service_url}/recipes", params=db_params)
             internal_data = internal_resp if isinstance(internal_resp, list) else []
 
             for r in internal_data:
@@ -117,43 +118,47 @@ class RecipeService(BaseInternalClient):
         except Exception as e:
             print(f"⚠️ Internal Search Error: {e}")
 
+        # ---------------------------------------------------------
         # 2. EXTERNAL SEARCH (TheMealDB)
-        # ------------------------------
-        ext_endpoint = ""
-        
-        if query:
-            ext_endpoint = f"/search/name/{query}"
-        elif ingredient:
-            ext_endpoint = f"/filter?i={ingredient}"
-        elif category:
-            ext_endpoint = f"/filter?c={category}"
-        elif area:
-            ext_endpoint = f"/filter?a={area}"
+        # ---------------------------------------------------------
+        ext_params = {}
+
+        if query: ext_params["query"] = query
+        if ingredient: ext_params["ingredient"] = ingredient
+        if category: ext_params["category"] = category
+        if area: ext_params["area"] = area
             
-        if ext_endpoint:
+        if ext_params:
             try:
-                url = f"{self.fetch_service_url}{ext_endpoint}"
-                ext_resp = requests.get(url, timeout=5)
+                url = f"{self.fetch_service_url}/search"
+                
+                ext_resp = requests.get(url, params=ext_params, timeout=5)
                 
                 if ext_resp.status_code == 200:
                     data = ext_resp.json()
-                    meals = data.get("meals") or []
+                    meals = data if isinstance(data, list) else data.get("meals", [])
                     
                     for m in meals:
                         ext_id = str(m.get("idMeal"))
+                        
                         if ext_id in known_external_ids:
                             continue
 
-                        res_category = m.get("strCategory") or category
-                        res_area = m.get("strArea") or area
+                        api_cat = m.get("strCategory")
+                        api_area = m.get("strArea")
+
+                        if category and api_cat and api_cat.lower() != category.lower():
+                            continue
+                        if area and api_area and api_area.lower() != area.lower():
+                            continue
 
                         results.append({
                             "id": None,
                             "external_id": ext_id,
                             "name": m.get("strMeal"),
                             "image": m.get("strMealThumb"),
-                            "category": res_category,
-                            "area": res_area,
+                            "category": api_cat or category,
+                            "area": api_area or area,
                             "instructions": m.get("strInstructions"),
                             "is_custom": False,
                             "source": "external"

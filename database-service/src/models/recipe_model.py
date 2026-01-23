@@ -6,12 +6,12 @@ class RecipeIngredient(SQLModel, table=True):
     __tablename__ = "recipe_ingredients"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    recipe_id: int = Field(foreign_key="recipes.id")
+    recipe_id: Optional[int] = Field(default=None, foreign_key="recipes.id")
     ingredient_name: str
     measure: Optional[str] = None
 
     # Inverse relationship (optional but useful)
-    recipe: "Recipe" = Relationship(back_populates="ingredients")
+    recipe: Optional["Recipe"] = Relationship(back_populates="ingredients")
 
 
 # Recipes table
@@ -43,7 +43,7 @@ class Recipe(SQLModel, table=True):
     # Relationships
     ingredients: List[RecipeIngredient] = Relationship(
         back_populates="recipe",
-        sa_relationship_kwargs={"cascade": "all, delete"}
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
     # reviews: List["Review"] = Relationship(...)
     # Will be added after creating the Review model
