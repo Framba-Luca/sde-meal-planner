@@ -2,25 +2,23 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 # -------------------------------------------------
-# CORE FIELDS (shared across all recipe schemas)
+# CORE FIELDS
 # -------------------------------------------------
 
 class RecipeCore(BaseModel):
     name: str
-    instructions: Optional[str] = None
     image: Optional[str] = None
     category: Optional[str] = None
     area: Optional[str] = None
-
-
+    
 # -------------------------------------------------
-# INPUT SCHEMAS
+# INPUT SCHEMAS (Create/Update)
 # -------------------------------------------------
 
 class RecipeCreate(RecipeCore):
     user_id: int
+    instructions: Optional[str] = None
     ingredients: List[Dict[str, Any]] = []
-
 
 class RecipeUpdate(RecipeCore):
     name: Optional[str] = None
@@ -28,28 +26,35 @@ class RecipeUpdate(RecipeCore):
     image: Optional[str] = None
     category: Optional[str] = None
     area: Optional[str] = None
-
+    ingredients: Optional[List[Dict[str, Any]]] = None
 
 # -------------------------------------------------
-# OUTPUT SCHEMAS (DB)
+# OUTPUT SCHEMAS (Internal DB)
 # -------------------------------------------------
 
 class RecipeResponse(RecipeCore):
     id: int
     user_id: int
     external_id: Optional[str] = None
+    instructions: Optional[str] = None
     is_custom: bool = True
+    ingredients: List[Dict[str, Any]] = []
 
     class Config:
         from_attributes = True
 
-
 # -------------------------------------------------
-# UNIFIED SEARCH RESPONSE (internal + external)
+# UNIFIED RESPONSES (Search vs Detail)
 # -------------------------------------------------
 
-class RecipeUnifiedResponse(RecipeCore):
+class RecipeUnifiedSummary(RecipeCore):
     id: Optional[int] = None
     external_id: Optional[str] = None
     is_custom: bool
-    source: str = "internal"
+    source: str = "external"
+    class Config:
+        from_attributes = True
+
+class RecipeUnifiedDetail(RecipeUnifiedSummary):
+    instructions: Optional[str] = None
+    ingredients: List[Dict[str, Any]] = []
