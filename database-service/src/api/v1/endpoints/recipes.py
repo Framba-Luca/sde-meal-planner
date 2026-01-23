@@ -65,7 +65,7 @@ async def get_recipe_detail(
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
 
-@router.get("", response_model=List[CustomRecipeResponse])
+@router.get("/", response_model=List[CustomRecipeResponse])
 async def get_recipe_detail(
     query: Optional[str] = None,
     category: Optional[str] = None,

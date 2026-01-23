@@ -103,67 +103,63 @@ class RecipeService(BaseInternalClient):
             for r in internal_data:
                 if r.get("external_id"):
                     known_external_ids.add(str(r["external_id"]))
-
-                results.append({
-                    "id": r.get("id"),
-                    "external_id": r.get("external_id"),
-                    "name": r.get("name"),
-                    "image": r.get("image"),
-                    "category": r.get("category"),
-                    "area": r.get("area"),
-                    "instructions": r.get("instructions"),
-                    "is_custom": r.get("is_custom", True),
-                    "source": "internal"
-                })
+                
+                results.append(r)
+                
         except Exception as e:
             print(f"⚠️ Internal Search Error: {e}")
 
         # ---------------------------------------------------------
-        # 2. EXTERNAL SEARCH (TheMealDB)
+        # 2. EXTERNAL SEARCH
         # ---------------------------------------------------------
-        ext_params = {}
-
-        if query: ext_params["query"] = query
-        if ingredient: ext_params["ingredient"] = ingredient
-        if category: ext_params["category"] = category
-        if area: ext_params["area"] = area
+        
+        url = ""
+        
+        if query:
+            # Calls: @app.get("/search/name/{name}")
+            url = f"{self.fetch_service_url}/search/name/{query}"
+        elif category:
+            # Calls: @app.get("/filter/category/{category}")
+            url = f"{self.fetch_service_url}/filter/category/{category}"
+        elif area:
+            # Calls: @app.get("/filter/area/{area}")
+            url = f"{self.fetch_service_url}/filter/area/{area}"
+        elif ingredient:
+            # Calls: @app.get("/filter/ingredient/{ingredient}")
+            url = f"{self.fetch_service_url}/filter/ingredient/{ingredient}"
             
-        if ext_params:
+        if url:
             try:
-                url = f"{self.fetch_service_url}/search"
-                
-                ext_resp = requests.get(url, params=ext_params, timeout=5)
+                ext_resp = requests.get(url, timeout=5)
                 
                 if ext_resp.status_code == 200:
                     data = ext_resp.json()
-                    meals = data if isinstance(data, list) else data.get("meals", [])
+                    meals = data.get("meals", [])
                     
                     for m in meals:
-                        ext_id = str(m.get("idMeal"))
+                        ext_id = str(m.get("id_external"))
                         
                         if ext_id in known_external_ids:
                             continue
-
-                        api_cat = m.get("strCategory")
-                        api_area = m.get("strArea")
-
-                        if category and api_cat and api_cat.lower() != category.lower():
-                            continue
-                        if area and api_area and api_area.lower() != area.lower():
-                            continue
-
+                        
                         results.append({
                             "id": None,
                             "external_id": ext_id,
-                            "name": m.get("strMeal"),
-                            "image": m.get("strMealThumb"),
-                            "category": api_cat or category,
-                            "area": api_area or area,
-                            "instructions": m.get("strInstructions"),
+                            "name": m.get("name"),
+                            "image": m.get("image"),
+                            "category": m.get("category"),
+                            "area": m.get("area"),
+                            "instructions": m.get("instructions"),
                             "is_custom": False,
                             "source": "external"
                         })
+
+                elif ext_resp.status_code == 404:
+                    pass
+                else:
+                    print(f"⚠️ External Search API Error: {ext_resp.status_code}")
+                    
             except Exception as e:
-                print(f"⚠️ External Search Error: {e}")
+                print(f"⚠️ External Search Connection Error: {e}")
 
         return results

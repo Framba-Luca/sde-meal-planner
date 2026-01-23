@@ -5,7 +5,6 @@ from fastapi import FastAPI, HTTPException, status, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from services import RecipesFetchService
-from deps import verify_token
 
 app = FastAPI(title="Recipes Fetch Service", version="1.0.0")
 
@@ -43,7 +42,7 @@ async def health_check():
 
 
 @app.get("/search/name/{name}")
-async def search_by_name(name: str, token: dict = Depends(verify_token)):
+async def search_by_name(name: str):
     """Search for recipes by name"""
     meals = recipes_fetch.search_by_name(name)
     if meals:
