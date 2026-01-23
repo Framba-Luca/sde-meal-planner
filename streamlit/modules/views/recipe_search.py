@@ -208,6 +208,14 @@ def _render_single_recipe_detail(item_id, partial_data, is_external=False):
     st.divider()
     
     if is_external:
-        render_reviews_section(external_id=item_id, recipe_name=name)
+        rec_id_val = None
+        ext_id_val = str(item_id)
     else:
-        render_reviews_section(recipe_id=int(item_id), recipe_name=name)
+        rec_id_val = int(item_id)
+        ext_id_val = meal.get("external_id")
+
+    render_reviews_section(
+        recipe_id=rec_id_val, 
+        external_id=ext_id_val, 
+        recipe_name=name
+    )

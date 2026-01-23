@@ -15,6 +15,10 @@ def render_reviews_section(external_id, recipe_name, recipe_id=None):
     _render_review_form(safe_ext_id, recipe_id)
 
 def _render_reviews_list(external_id):
+    if external_id == "None":
+        st.info("Reviews are not available for purely custom recipes without external link yet.")
+        return
+
     reviews = make_request(f"{RECIPE_CRUD_URL}/reviews/external/{external_id}")
     
     if not reviews:
@@ -46,7 +50,18 @@ def _render_reviews_list(external_id):
 def _render_review_form(external_id, recipe_id):
     st.markdown("#### Write a Review")
     
-    form_key = f"form_review_{external_id}"
+    # --- CORREZIONE LOGICA CHIAVE UNICA ---
+    # Il problema era che per le ricette Custom (external_id=None), la chiave era sempre uguale.
+    # Ora usiamo una logica a priorità:
+    if recipe_id:
+        # Se è una ricetta interna (ha ID), usiamo quello per l'univocità
+        unique_suffix = f"int_{recipe_id}"
+    else:
+        # Se è esterna (recipe_id è None), usiamo l'external_id
+        unique_suffix = f"ext_{external_id}"
+
+    form_key = f"form_review_{unique_suffix}"
+    # --------------------------------------
     
     with st.form(key=form_key):
         col1, col2 = st.columns([1, 4])
@@ -69,7 +84,7 @@ def _render_review_form(external_id, recipe_id):
             payload = {
                 "rating": rating, 
                 "comment": comment, 
-                "external_id": external_id,
+                "external_id": external_id if external_id != "None" else None,
                 "recipe_id": recipe_id
             }
             

@@ -12,7 +12,6 @@ async def create(recipe: RecipeCreate,
                  current_user_id: int = Depends(get_current_user)):
     
     recipe.user_id = current_user_id
-    
     res = service.create_recipe(current_user_id, recipe.dict())
     if not res: raise HTTPException(400, "Error creating recipe")
     return res
@@ -24,16 +23,10 @@ async def update_recipe(
     service: RecipeService = Depends(get_recipe_service),
     current_user_id: int = Depends(get_current_user)
 ):
-    """
-    Update a recipe. Checks if the user is the owner.
-    """
-    # Escludiamo i campi unset per mandare solo le modifiche
     data = recipe_update.dict(exclude_unset=True)
-    
     result = service.update_recipe(current_user_id, recipe_id, data)
     
     if result and "error" in result:
-        # Usa il codice errore restituito dal service (es. 403 o 404)
         code = result.get("code", 400)
         raise HTTPException(status_code=code, detail=result["error"])
         
@@ -45,9 +38,6 @@ async def delete_recipe(
     service: RecipeService = Depends(get_recipe_service),
     current_user_id: int = Depends(get_current_user)
 ):
-    """
-    Delete a recipe. Checks if the user is the owner.
-    """
     result = service.delete_recipe(current_user_id, recipe_id)
     
     if result and "error" in result:
@@ -68,9 +58,6 @@ async def search_recipes(
     ingredient: Optional[str] = Query(None, description="Filter by ingredient"),
     service: RecipeService = Depends(get_recipe_service)
 ):
-    """
-        Returns all the recipes (from TheMealDB or Custom ones)
-    """
     if not any([q, category, area, ingredient]):
         return []
 
@@ -80,3 +67,20 @@ async def search_recipes(
         area=area,
         ingredient=ingredient
     )
+
+@router.get("/{recipe_id}", response_model=RecipeUnifiedResponse)
+async def recipe_by_id(
+    recipe_id: int,
+    source: Optional[str] = Query(None, description="Set to 'external' to force external fetch"),
+    service: RecipeService = Depends(get_recipe_service),
+):
+    """
+    Get details of a single recipe. 
+    If 'source=external' is passed, it skips internal DB lookup.
+    """
+    result = service.get_recipe(recipe_id, source=source)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+        
+    return result
