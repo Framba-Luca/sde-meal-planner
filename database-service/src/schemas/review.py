@@ -15,7 +15,7 @@ class ReviewResponse(BaseModel):
     rating: int
     comment: str
     created_at: datetime
-    username: Optional[str] = None
+    username: Optional[str] = "Unknown"
 
     class Config:
         from_attributes = True

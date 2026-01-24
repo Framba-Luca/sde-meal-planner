@@ -7,26 +7,36 @@ recipe_url = f"{RECIPE_CRUD_URL}/{API_VERSION}"
 def render_reviews_section(external_id, recipe_name, recipe_id=None):
     """
     Component used in recipe detail views.
+    Handles both External (MealDB) and Internal (Custom) recipes safely.
     """
     safe_ext_id = str(external_id)
-    
+
     st.markdown("---")
     st.subheader(f"Reviews for {recipe_name}")
 
-    _render_reviews_list(safe_ext_id)
+    _render_reviews_list(safe_ext_id, recipe_id)
     _render_review_form(safe_ext_id, recipe_id)
 
-def _render_reviews_list(external_id):
-    if external_id == "None":
-        st.info("Reviews are not available for purely custom recipes without external link yet.")
-        return
+def _render_reviews_list(external_id, recipe_id):
+    # 1. FETCH (Internal vs External)
+    is_custom_pure = (external_id == "None" or not external_id) and recipe_id
+    
+    if is_custom_pure:
+        fetch_url = f"{recipe_url}/reviews/recipe/{recipe_id}?type=internal"
+    else:
+        if external_id == "None":
+            st.warning("Cannot load reviews: Missing recipe ID.")
+            return
+        fetch_url = f"{recipe_url}/reviews/recipe/{external_id}?type=external"
 
-    reviews = make_request(f"{recipe_url}/reviews/recipe/{external_id}")
+    # 2. API CALL
+    reviews = make_request(fetch_url)
     
     if not reviews:
         st.info("No reviews yet. Be the first to review!")
         return
 
+    # 3. RENDER LIST
     for rev in reviews:
         with st.container(border=True):
             c1, c2 = st.columns([6, 1])
@@ -39,9 +49,7 @@ def _render_reviews_list(external_id):
             
             with c2:
                 current_user_id = st.session_state.get("user_id")
-                # Controlliamo se l'utente è il proprietario della recensione
                 if current_user_id and str(rev.get("user_id")) == str(current_user_id):
-                    # CHIAVE UNICA SICURA per il bottone delete
                     btn_key = f"del_{external_id}_{rev['id']}"
                     
                     if st.button("🗑️", key=btn_key, help="Delete your review"):
@@ -52,18 +60,12 @@ def _render_reviews_list(external_id):
 def _render_review_form(external_id, recipe_id):
     st.markdown("#### Write a Review")
     
-    # --- CORREZIONE LOGICA CHIAVE UNICA ---
-    # Il problema era che per le ricette Custom (external_id=None), la chiave era sempre uguale.
-    # Ora usiamo una logica a priorità:
     if recipe_id:
-        # Se è una ricetta interna (ha ID), usiamo quello per l'univocità
         unique_suffix = f"int_{recipe_id}"
     else:
-        # Se è esterna (recipe_id è None), usiamo l'external_id
         unique_suffix = f"ext_{external_id}"
 
     form_key = f"form_review_{unique_suffix}"
-    # --------------------------------------
     
     with st.form(key=form_key):
         col1, col2 = st.columns([1, 4])

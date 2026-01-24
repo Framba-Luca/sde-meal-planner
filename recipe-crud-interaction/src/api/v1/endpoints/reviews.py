@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import List
 from src.schemas.review import ReviewCreate, ReviewResponse
 from src.services.review_service import ReviewService
 from src.api.deps import get_review_service, get_current_user
@@ -7,14 +7,17 @@ from src.api.deps import get_review_service, get_current_user
 router = APIRouter()
 
 @router.get("/recipe/{recipe_id}", response_model=List[ReviewResponse])
-async def get_reviews(
-    recipe_id: int,
+def read_reviews_by_recipe(
+    recipe_id: str,
+    type: str = Query("auto", enum=["auto", "external", "internal"], description="Specify if the ID is external (MealDB) or internal (Custom)"),
     service: ReviewService = Depends(get_review_service)
 ):
     """
-    Obtains all the reviews for a specific recipe
+    Get reviews. 
+    Use ?type=external for generic API recipes.
+    Use ?type=internal for custom user recipes.
     """
-    return service.get_reviews(recipe_id)
+    return service.get_reviews_by_recipe(recipe_id, search_mode=type)
 
 @router.post("/", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def create_review(
