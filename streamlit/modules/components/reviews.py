@@ -1,6 +1,8 @@
 import streamlit as st
-from modules.config import RECIPE_CRUD_URL
+from modules.config import RECIPE_CRUD_URL, API_VERSION
 from modules.api import make_request
+
+recipe_url = f"{RECIPE_CRUD_URL}/{API_VERSION}"
 
 def render_reviews_section(external_id, recipe_name, recipe_id=None):
     """
@@ -19,7 +21,7 @@ def _render_reviews_list(external_id):
         st.info("Reviews are not available for purely custom recipes without external link yet.")
         return
 
-    reviews = make_request(f"{RECIPE_CRUD_URL}/reviews/external/{external_id}")
+    reviews = make_request(f"{recipe_url}/reviews/external/{external_id}")
     
     if not reviews:
         st.info("No reviews yet. Be the first to review!")
@@ -43,7 +45,7 @@ def _render_reviews_list(external_id):
                     btn_key = f"del_{external_id}_{rev['id']}"
                     
                     if st.button("🗑️", key=btn_key, help="Delete your review"):
-                        if make_request(f"{RECIPE_CRUD_URL}/reviews/{rev['id']}", method="DELETE"):
+                        if make_request(f"{recipe_url}/reviews/{rev['id']}", method="DELETE"):
                             st.toast("Review deleted!")
                             st.rerun()
 
@@ -88,6 +90,6 @@ def _render_review_form(external_id, recipe_id):
                 "recipe_id": recipe_id
             }
             
-            if make_request(f"{RECIPE_CRUD_URL}/reviews/", method="POST", data=payload):
+            if make_request(f"{recipe_url}/reviews/", method="POST", data=payload):
                 st.success("Review posted!")
                 st.rerun()
