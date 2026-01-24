@@ -21,7 +21,7 @@ def _render_reviews_list(external_id):
         st.info("Reviews are not available for purely custom recipes without external link yet.")
         return
 
-    reviews = make_request(f"{recipe_url}/reviews/external/{external_id}")
+    reviews = make_request(f"{recipe_url}/reviews/recipe/{external_id}")
     
     if not reviews:
         st.info("No reviews yet. Be the first to review!")
