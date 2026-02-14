@@ -32,6 +32,12 @@ def _render_reviews_list(external_id, recipe_id):
     # 2. API CALL
     reviews = make_request(fetch_url)
     
+    # --- 🛠️ DEBUG BLOCK: Mostra il JSON grezzo ---
+    with st.expander("🔍 Debug API Response (JSON)"):
+        st.write(f"**URL:** `{fetch_url}`")
+        st.json(reviews)
+    # ---------------------------------------------
+
     if not reviews:
         st.info("No reviews yet. Be the first to review!")
         return

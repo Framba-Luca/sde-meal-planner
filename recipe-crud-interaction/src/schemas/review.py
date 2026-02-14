@@ -11,6 +11,7 @@ class ReviewResponse(BaseModel):
     id: int
     recipe_id: int
     user_id: int
+    username: Optional[str] = "Unknown"
     rating: int
     comment: str
     created_at: str
