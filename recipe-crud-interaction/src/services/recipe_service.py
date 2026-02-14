@@ -2,63 +2,34 @@ import requests
 from typing import Dict, Optional, Any, List
 from src.core.config import settings
 from src.services.base_client import BaseInternalClient
-import json
-import redis
+from src.core.cache import cache_client
 import hashlib
 
 class RecipeService(BaseInternalClient):
 
-    # Redis Initiaalization
-
     def __init__(self):
         super().__init__()
-        self.cache = redis.Redis(
-            host=settings.REDIS_HOST, 
-            port=settings.REDIS_PORT, 
-            decode_responses=True
-        )
         self.fetch_service_url = settings.RECIPES_FETCH_SERVICE_URL
         self.db_service_url = f"{settings.DATABASE_SERVICE_URL}{settings.API_V1_STR}"
-        self.CACHE_TTL = 3600
-
-    def _safe_cache_get(self, key: str):
-        try:
-            data = self.cache.get(key)
-            return json.loads(data) if data else None
-        except Exception as e:
-            print(f"⚠️ Redis Get Error: {e}")
-            return None
-
-    def _safe_cache_set(self, key: str, value: Any, ttl: int = None):
-        try:
-            self.cache.setex(key, ttl or self.CACHE_TTL, json.dumps(value))
-        except Exception as e:
-            print(f"⚠️ Redis Set Error: {e}")
-
-    def _safe_cache_delete(self, *keys):
-        try:
-            if keys:
-                self.cache.delete(*keys)
-        except Exception as e:
-            print(f"⚠️ Redis Delete Error: {e}")
 
     # --- RECIPE OPERATIONS --- #
         
     def get_user_recipes(self, user_id: int):
         cache_key = f"recipes:user:{user_id}"
-        cached = self._safe_cache_get(cache_key)
+        
+        cached = cache_client.get(cache_key)
         if cached is not None:
             return cached
 
         data = self._req("GET", f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes/user/{user_id}") or []
-        self._safe_cache_set(cache_key, data, ttl=1800)
+        cache_client.set(cache_key, data, ttl=1800)
         return data
 
     def create_recipe(self, user_id: int, data: Dict):
         url = f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes"
         result = self._req("POST", url, {"user_id": user_id, **data})
         
-        self._safe_cache_delete(f"recipes:user:{user_id}")
+        cache_client.delete(f"recipes:user:{user_id}")
         return result
 
     def get_recipe(self, recipe_id: int, source: str = None):
@@ -67,9 +38,9 @@ class RecipeService(BaseInternalClient):
         If source="external", it skips the local DB and goes straight to the fetch service.
         Otherwise, it tries the DB first, then falls back to external.
         """
-        
         cache_key = f"recipe:{source or 'auto'}:{recipe_id}"
-        cached = self._safe_cache_get(cache_key)
+        
+        cached = cache_client.get(cache_key)
         if cached:
             return cached
 
@@ -77,7 +48,7 @@ class RecipeService(BaseInternalClient):
         if source == "external":
             result = self._fetch_external_recipe(recipe_id)
             if result:
-                self._safe_cache_set(cache_key, result, ttl=86400) # 24h per le esterne (non cambiano)
+                cache_client.set(cache_key, result, ttl=86400) # 24h for external
             return result
 
         # 2. Internal DB
@@ -85,7 +56,7 @@ class RecipeService(BaseInternalClient):
             internal_recipe = self._req("GET", f"{self.db_service_url}/recipes/{recipe_id}")
             if internal_recipe and "id" in internal_recipe:
                 internal_recipe["source"] = "internal"
-                self._safe_cache_set(cache_key, internal_recipe, ttl=1800)
+                cache_client.set(cache_key, internal_recipe, ttl=1800)
                 return internal_recipe
         except Exception:
             pass
@@ -93,7 +64,7 @@ class RecipeService(BaseInternalClient):
         # 3. Fallback: External
         result = self._fetch_external_recipe(recipe_id)
         if result:
-            self._safe_cache_set(cache_key, result, ttl=86400)
+            cache_client.set(cache_key, result, ttl=86400)
         return result
 
     def _fetch_external_recipe(self, recipe_id):
@@ -130,7 +101,7 @@ class RecipeService(BaseInternalClient):
 
         result = self._req("PUT", f"{self.db_service_url}/recipes/{recipe_id}", data)
         
-        self._safe_cache_delete(
+        cache_client.delete(
             f"recipe:internal:{recipe_id}",
             f"recipe:auto:{recipe_id}",
             f"recipes:user:{user_id}"
@@ -146,8 +117,7 @@ class RecipeService(BaseInternalClient):
 
         result = self._req("DELETE", f"{self.db_service_url}/recipes/{recipe_id}")
         
-        # INVALIDAZIONE CACHE
-        self._safe_cache_delete(
+        cache_client.delete(
             f"recipe:internal:{recipe_id}",
             f"recipe:auto:{recipe_id}",
             f"recipes:user:{user_id}"
@@ -185,7 +155,7 @@ class RecipeService(BaseInternalClient):
         params_str = f"{query}-{category}-{area}-{ingredient}"
         cache_key = f"search:{hashlib.md5(params_str.encode()).hexdigest()}"
         
-        cached = self._safe_cache_get(cache_key)
+        cached = cache_client.get(cache_key)
         if cached is not None:
             return cached
 
@@ -242,5 +212,5 @@ class RecipeService(BaseInternalClient):
             except Exception as e:
                 print(f"⚠️ External Search Connection Error: {e}")
 
-        self._safe_cache_set(cache_key, results, ttl=300)
+        cache_client.set(cache_key, results, ttl=300)
         return results
