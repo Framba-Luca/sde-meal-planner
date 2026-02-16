@@ -95,7 +95,7 @@ class MealPlannerService:
         Returns:
             Created meal plan item or None if failed
         """
-        url = f"{self.database_service_url}/api/v1/meal-plans/items/"
+        url = f"{self.database_service_url}/api/v1/meal-plans/items"
         data = {
             "meal_plan_id": meal_plan_id,
             "mealdb_id": mealdb_id,

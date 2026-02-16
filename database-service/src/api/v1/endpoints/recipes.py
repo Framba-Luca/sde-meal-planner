@@ -65,6 +65,13 @@ async def get_recipe_detail(
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe
 
+@router.get("/random", response_model=CustomRecipeResponse)
+def get_random_recipe(service: RecipeService = Depends(get_recipe_service)):
+    recipe = service.get_random_recipe()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="No recipes found")
+    return recipe
+
 @router.get("/", response_model=List[CustomRecipeResponse])
 async def get_recipe_detail(
     query: Optional[str] = None,

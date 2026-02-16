@@ -92,8 +92,11 @@ services:
       - "8003:8003"
     environment:
       SECRET_KEY: ${SECRET_KEY}
+      RECIPE_CRUD_URL: ${RECIPE_CRUD_URL}
     networks:
       - meal-planner-network
+    depends_on:
+      - recipe-crud-interaction
 
   # Meal Planner Service
   meal-planner-pcl:

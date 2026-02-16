@@ -84,3 +84,10 @@ async def recipe_by_id(
         raise HTTPException(status_code=404, detail="Recipe not found")
         
     return result
+
+@router.get("/random", response_model=Optional[RecipeUnifiedDetail])
+async def get_random_recipe(service: RecipeService = Depends(get_recipe_service)):
+    """
+    Get a random recipe (Mixed Internal & External).
+    """
+    return service.get_random_recipe()

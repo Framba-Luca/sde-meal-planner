@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 from src.models.recipe_model import Recipe, RecipeIngredient
 from src.schemas.recipe import CustomRecipeCreate, RecipeUpdate
 
@@ -99,6 +99,10 @@ class RecipeService:
         statement = statement.distinct()
 
         return self.session.exec(statement).all()
+
+    def get_random_recipe(self) -> Optional[Recipe]:
+        statement = select(Recipe).order_by(func.random()).limit(1)
+        return self.session.exec(statement).first()
 
     def get_recipe_by_external_id(self, external_id: str) -> Optional[Recipe]:
         statement = select(Recipe).where(Recipe.external_id == external_id)

@@ -3,8 +3,9 @@ Meal Proposer Service - REST API endpoints
 """
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Union
 from service import MealProposerService
+import random
 
 app = FastAPI(title="Meal Proposer Service", version="1.0.0")
 
@@ -23,14 +24,15 @@ class MultipleMealsRequest(BaseModel):
 
 
 class RecipeResponse(BaseModel):
-    id: int
+    # Changed to str to support both Internal (int) and External (str) IDs uniformly
+    id: str 
     name: str
-    category: str
-    area: str
-    instructions: str
-    image: str
-    tags: str
-    youtube: str
+    category: Optional[str] = "Unknown"
+    area: Optional[str] = "Unknown"
+    instructions: Optional[str] = ""
+    image: Optional[str] = None
+    tags: Optional[str] = ""
+    youtube: Optional[str] = ""
     ingredients: List[dict]
 
 
@@ -50,74 +52,28 @@ async def health_check():
 @app.post("/propose", response_model=RecipeResponse)
 async def propose_meal(request: MealProposalRequest):
     """Propose a single meal based on ingredient or randomly"""
-    recipe = meal_proposer.propose_meal(request.ingredient)
+    recipe = None
+    
+    if request.ingredient:
+        candidates = meal_proposer.search_by_ingredient(request.ingredient)
+        
+        if candidates:
+            selection = random.choice(candidates)
+            recipe_id = selection.get("id")
+            print(f"DEBUG: Selected candidate ID {recipe_id}, fetching full details...")
+            
+            recipe = meal_proposer.get_recipe_by_id(recipe_id)
+            
+    else:
+        recipe = meal_proposer.get_random_meal()
+    
     if recipe:
-        return RecipeResponse(**meal_proposer.format_recipe(recipe))
+        return recipe
+        
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipe found"
+        detail="No meals found"
     )
-
-
-@app.post("/propose/multiple", response_model=List[RecipeResponse])
-async def propose_multiple_meals(request: MultipleMealsRequest):
-    """Propose multiple meals"""
-    recipes = meal_proposer.propose_multiple_meals(request.count, request.ingredient)
-    if recipes:
-        return [RecipeResponse(**meal_proposer.format_recipe(recipe)) for recipe in recipes]
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipes found"
-    )
-
-
-@app.get("/recipe/{recipe_id}", response_model=RecipeResponse)
-async def get_recipe_by_id(recipe_id: int):
-    """Get a recipe by its ID"""
-    recipe = meal_proposer.get_recipe_by_id(recipe_id)
-    if recipe:
-        return RecipeResponse(**meal_proposer.format_recipe(recipe))
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Recipe not found"
-    )
-
-
-@app.get("/search/ingredient/{ingredient}")
-async def search_by_ingredient(ingredient: str):
-    """Search for recipes by ingredient"""
-    meals = meal_proposer.search_by_ingredient(ingredient)
-    if meals:
-        return {"count": len(meals), "meals": meals}
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipes found with this ingredient"
-    )
-
-
-@app.get("/search/name/{name}")
-async def search_by_name(name: str):
-    """Search for recipes by name"""
-    meals = meal_proposer.search_by_name(name)
-    if meals:
-        return {"count": len(meals), "meals": meals}
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipes found with this name"
-    )
-
-
-@app.get("/random", response_model=RecipeResponse)
-async def get_random_recipe():
-    """Get a random recipe"""
-    recipe = meal_proposer.get_random_recipe()
-    if recipe:
-        return RecipeResponse(**meal_proposer.format_recipe(recipe))
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="No recipe found"
-    )
-
 
 @app.get("/categories")
 async def get_categories():
@@ -165,8 +121,3 @@ async def filter_by_area(area: str):
         status_code=status.HTTP_404_NOT_FOUND,
         detail="No recipes found in this area"
     )
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8003)

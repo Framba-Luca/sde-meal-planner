@@ -4,6 +4,7 @@ from src.core.config import settings
 from src.services.base_client import BaseInternalClient
 from src.core.cache import cache_client
 import hashlib
+import random
 
 class RecipeService(BaseInternalClient):
 
@@ -214,3 +215,138 @@ class RecipeService(BaseInternalClient):
 
         cache_client.set(cache_key, results, ttl=300)
         return results
+    
+    # --- NEW METHODS FOR MEAL PROPOSER SUPPORT ---
+
+    def get_categories(self) -> List[str]:
+        """
+        Proxy method to get categories from Fetch Service.
+        Cached for performance.
+        """
+        cache_key = "metadata:categories"
+        cached = cache_client.get(cache_key)
+        if cached: return cached
+
+        # Call Fetch Service
+        url = f"{self.fetch_service_url}/categories"
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json().get("categories", [])
+                cache_client.set(cache_key, data, ttl=86400) # 24h cache
+                return data
+        except Exception as e:
+            print(f"Error fetching categories: {e}")
+        return []
+
+    def get_areas(self) -> List[str]:
+        """Proxy method to get areas from Fetch Service"""
+        cache_key = "metadata:areas"
+        cached = cache_client.get(cache_key)
+        if cached: return cached
+
+        url = f"{self.fetch_service_url}/areas"
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json().get("areas", [])
+                cache_client.set(cache_key, data, ttl=86400)
+                return data
+        except Exception as e:
+            print(f"Error fetching areas: {e}")
+        return []
+
+    # ---------------------------------------------------------
+    # RANDOM RECIPE LOGIC (Internal + External Mix)
+    # ---------------------------------------------------------
+
+    def get_random_recipe(self) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves a random recipe.
+        Randomly decides whether to fetch from Internal DB or External API.
+        Returns data matching RecipeUnifiedDetail schema.
+        """
+        # 50% chance to pick Internal or External
+        source_choice = random.choice(["internal", "external"])
+        recipe = None
+
+        # print(f"DEBUG: Trying to fetch random recipe from {source_choice}")
+
+        if source_choice == "internal":
+            recipe = self._get_random_internal()
+            # Fallback to external if internal DB is empty or fails
+            if not recipe:
+                recipe = self._get_random_external()
+        else:
+            recipe = self._get_random_external()
+            # Fallback to internal if external API fails
+            if not recipe:
+                 recipe = self._get_random_internal()
+
+        return recipe
+
+    def _get_random_internal(self) -> Optional[Dict[str, Any]]:
+        """Helper to fetch random recipe from Database Service"""
+        try:
+            # Calls GET /api/v1/recipes/random in database-service
+            # Ensure your database-service has this endpoint!
+            response = self._req("GET", f"{self.db_service_url}/recipes/random")
+            
+            if response and "id" in response:
+                # Map to RecipeUnifiedDetail structure
+                return {
+                    "id": response.get("id"),
+                    "external_id": str(response.get("external_id")) if response.get("external_id") else None,
+                    "name": response.get("name"),
+                    "image": response.get("image"),
+                    "category": response.get("category"),
+                    "area": response.get("area"),
+                    "instructions": response.get("instructions"),
+                    "ingredients": response.get("ingredients", []),
+                    "is_custom": True,
+                    "source": "internal"
+                }
+        except Exception as e:
+            print(f"⚠️ Internal Random Error: {e}")
+        return None
+
+    def _get_random_external(self) -> Optional[Dict[str, Any]]:
+        """Helper to fetch random recipe from Fetch Service"""
+        try:
+            # Calls GET /random in recipe-fetch-service
+            url = f"{self.fetch_service_url}/random" 
+            resp = requests.get(url, timeout=5)
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                
+                # Handle case where API returns a list or a single object
+                item = None
+                if isinstance(data, list) and len(data) > 0:
+                    item = data[0]
+                elif isinstance(data, dict):
+                    item = data
+                
+                if item:
+                    # Use the helper to map to unified format
+                    return self._map_external_to_unified(item)
+                    
+        except Exception as e:
+            print(f"⚠️ External Random Error: {e}")
+        return None
+
+    def _map_external_to_unified(self, ext_data: Dict) -> Dict:
+        """Helper to format external data to unified format"""
+        return {
+            "id": None,
+            "external_id": str(ext_data.get("id_external") or ext_data.get("idMeal")),
+            "name": ext_data.get("name") or ext_data.get("strMeal"),
+            "image": ext_data.get("image") or ext_data.get("strMealThumb"),
+            "category": ext_data.get("category") or ext_data.get("strCategory"),
+            "area": ext_data.get("area") or ext_data.get("strArea"),
+            "instructions": ext_data.get("instructions") or ext_data.get("strInstructions"),
+            "is_custom": False,
+            "source": "external",
+            # Flatten ingredients if necessary or pass as is
+            "ingredients": ext_data.get("ingredients", []) 
+        }
