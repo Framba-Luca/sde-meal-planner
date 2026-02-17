@@ -142,13 +142,19 @@ class MealPlannerService:
                 # Propose a meal for this meal type
                 meal = self.propose_meal(ingredient)
                 if meal:
-                    recipe_id = meal.get("id") or meal.get("idMeal")
-
+                    recipe_id = meal.get("id") or meal.get("external_id")
+                    
                     if recipe_id:
+                        # Convert to int if it's a string representation of an integer
+                        try:
+                            mealdb_id = int(recipe_id) if isinstance(recipe_id, str) else recipe_id
+                        except (ValueError, TypeError):
+                            mealdb_id = recipe_id
+                        
                         # Add meal to plan
                         meal_item = self.add_meal_to_plan(
                             meal_plan_id=meal_plan_id,
-                            mealdb_id=meal["id"],
+                            mealdb_id=mealdb_id,
                             meal_date=current_date,
                             meal_type=meal_type
                         )
