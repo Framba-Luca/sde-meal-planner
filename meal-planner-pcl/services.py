@@ -10,7 +10,7 @@ import os
 MEAL_PROPOSER_URL = os.getenv("MEAL_PROPOSER_URL", "http://meal-proposer:8003")
 DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://database-service:8002")
 INTERNAL_SERVICE_SECRET = os.getenv("INTERNAL_SERVICE_SECRET", "internal-service-secret-key")
-
+RECIPE_CRUD_URL = os.getenv("RECIPE_CRUD_URL", "http://recipe-crud-interaction:8005")
 
 class MealPlannerService:
     """Service for creating and managing meal plans"""
@@ -18,6 +18,7 @@ class MealPlannerService:
     def __init__(self):
         self.meal_proposer_url = MEAL_PROPOSER_URL
         self.database_service_url = DATABASE_SERVICE_URL
+        self.recipe_crud_url = RECIPE_CRUD_URL
     
     def _make_request(self, url: str, method: str = "GET", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Optional[Dict[str, Any]]:
         """Make an HTTP request to another service"""
@@ -314,7 +315,7 @@ class MealPlannerService:
     
     def _get_recipe_details(self, mealdb_id: int) -> Optional[Dict[str, Any]]:
         """
-        Get recipe details from meal proposer service
+        Get recipe details from recipe-crud-interaction service
         
         Args:
             mealdb_id: ID of the recipe from TheMealDB
@@ -322,6 +323,6 @@ class MealPlannerService:
         Returns:
             Recipe details or None if failed
         """
-        url = f"{self.meal_proposer_url}/recipe/{mealdb_id}"
+        url = f"{self.recipe_crud_url}/api/v1/recipes/{mealdb_id}"
         result = self._make_request(url, method="GET")
         return result
