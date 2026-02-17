@@ -38,8 +38,6 @@ class MealProposerService:
         Calls the Gateway endpoint: GET /search (defined in recipes.py)
         Returns: List of Summaries (ID, Name, Image, but NO ingredients/instructions)
         """
-        print(f"DEBUG: Attempting smart search for '{query}'")
-
         # 1. Try by Ingredient
         # recipes.py defines query param 'ingredient'
         results = self._make_request("search", params={"ingredient": query})

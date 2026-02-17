@@ -60,7 +60,6 @@ async def propose_meal(request: MealProposalRequest):
         if candidates:
             selection = random.choice(candidates)
             recipe_id = selection.get("id")
-            print(f"DEBUG: Selected candidate ID {recipe_id}, fetching full details...")
             
             recipe = meal_proposer.get_recipe_by_id(recipe_id)
             
