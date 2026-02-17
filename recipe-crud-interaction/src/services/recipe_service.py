@@ -87,8 +87,9 @@ class RecipeService(BaseInternalClient):
                     "source": "external",
                     "ingredients": data.get("ingredients", [])
                 }
-        except Exception as e:
-            print(f"⚠️ Error fetching external recipe: {e}")
+        except Exception:
+            # Fallback gracefully on external service errors
+            pass
         return None
 
     def update_recipe(self, user_id: int, recipe_id: int, data: Dict) -> Dict[str, Any]:
@@ -179,8 +180,9 @@ class RecipeService(BaseInternalClient):
                     known_external_ids.add(str(r["external_id"]))
                 r["source"] = "internal"
                 results.append(r)
-        except Exception as e:
-            print(f"⚠️ Internal Search Error: {e}")
+        except Exception:
+            # Internal search failed, will try external
+            pass
 
         # 2. External Search
         url = ""
@@ -210,8 +212,9 @@ class RecipeService(BaseInternalClient):
                             "is_custom": False,
                             "source": "external"
                         })
-            except Exception as e:
-                print(f"⚠️ External Search Connection Error: {e}")
+            except Exception:
+                # External search failed, continue with internal results
+                pass
 
         cache_client.set(cache_key, results, ttl=300)
         return results
@@ -235,8 +238,9 @@ class RecipeService(BaseInternalClient):
                 data = resp.json().get("categories", [])
                 cache_client.set(cache_key, data, ttl=86400) # 24h cache
                 return data
-        except Exception as e:
-            print(f"Error fetching categories: {e}")
+        except Exception:
+            # Metadata fetch failed, return empty
+            pass
         return []
 
     def get_areas(self) -> List[str]:
@@ -252,8 +256,9 @@ class RecipeService(BaseInternalClient):
                 data = resp.json().get("areas", [])
                 cache_client.set(cache_key, data, ttl=86400)
                 return data
-        except Exception as e:
-            print(f"Error fetching areas: {e}")
+        except Exception:
+            # Metadata fetch failed, return empty
+            pass
         return []
 
     # ---------------------------------------------------------
@@ -270,7 +275,7 @@ class RecipeService(BaseInternalClient):
         source_choice = random.choice(["internal", "external"])
         recipe = None
 
-        # print(f"DEBUG: Trying to fetch random recipe from {source_choice}")
+
 
         if source_choice == "internal":
             recipe = self._get_random_internal()
@@ -292,22 +297,33 @@ class RecipeService(BaseInternalClient):
             # Ensure your database-service has this endpoint!
             response = self._req("GET", f"{self.db_service_url}/recipes/random")
             
-            if response and "id" in response:
-                # Map to RecipeUnifiedDetail structure
-                return {
-                    "id": response.get("id"),
-                    "external_id": str(response.get("external_id")) if response.get("external_id") else None,
-                    "name": response.get("name"),
-                    "image": response.get("image"),
-                    "category": response.get("category"),
-                    "area": response.get("area"),
-                    "instructions": response.get("instructions"),
-                    "ingredients": response.get("ingredients", []),
-                    "is_custom": True,
-                    "source": "internal"
-                }
-        except Exception as e:
-            print(f"⚠️ Internal Random Error: {e}")
+            if not response or not isinstance(response, dict):
+                return None
+                
+            if "id" not in response:
+                return None
+            
+            # Ensure user_id is valid (skip if None for shadow recipes)
+            user_id = response.get("user_id")
+            if user_id is None:
+                return None  # Skip shadow recipes in random fetch
+            
+            # Map to RecipeUnifiedDetail structure
+            return {
+                "id": response.get("id"),
+                "external_id": str(response.get("external_id")) if response.get("external_id") else None,
+                "name": response.get("name"),
+                "image": response.get("image"),
+                "category": response.get("category"),
+                "area": response.get("area"),
+                "instructions": response.get("instructions"),
+                "ingredients": response.get("ingredients", []),
+                "is_custom": True,
+                "source": "internal"
+            }
+        except Exception:
+            # Internal random failed, fallback will be triggered
+            pass
         return None
 
     def _get_random_external(self) -> Optional[Dict[str, Any]]:
@@ -331,8 +347,9 @@ class RecipeService(BaseInternalClient):
                     # Use the helper to map to unified format
                     return self._map_external_to_unified(item)
                     
-        except Exception as e:
-            print(f"⚠️ External Random Error: {e}")
+        except Exception:
+            # External random failed, return None
+            pass
         return None
 
     def _map_external_to_unified(self, ext_data: Dict) -> Dict:

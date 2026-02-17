@@ -32,7 +32,7 @@ class CustomRecipeCreate(BaseModel):
 
 class CustomRecipeResponse(BaseModel):
     id: int
-    user_id: int
+    user_id: Optional[int] = None  # None for shadow/external recipes
     name: str
     category: Optional[str] = None
     area: Optional[str] = None

@@ -24,6 +24,12 @@ class MealProposerService:
             return response.json()
         except requests.RequestException as e:
             print(f"Error making request to Recipe Gateway: {e}")
+            if hasattr(e.response, 'status_code'):
+                print(f"  Status Code: {e.response.status_code}")
+                try:
+                    print(f"  Response: {e.response.text[:500]}")
+                except:
+                    pass
             return None
 
     def search_smart(self, query: str) -> Optional[List[Dict[str, Any]]]:
