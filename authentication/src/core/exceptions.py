@@ -13,3 +13,7 @@ class UserAlreadyExists(AuthServiceError):
 class InvalidCredentials(AuthServiceError):
     """Exception raised when credentials are invalid"""
     pass
+
+class InvalidToken(AuthServiceError):
+    """Exception raised when token is invalid, expired, or revoked"""
+    pass

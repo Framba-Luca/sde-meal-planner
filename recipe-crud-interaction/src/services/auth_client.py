@@ -11,7 +11,7 @@ class AuthClient:
         """
         Calls GET /api/v1/users/me on Auth Service to validate the toke.
         """
-        url = f"{settings.AUTHENTICATION_SERVICE_URL}{settings.API_V1_STR}/users/me"
+        url = f"{settings.AUTHENTICATION_SERVICE_URL}{settings.API_V1_STR}/auth/me"
         
         headers = {
             "Authorization": f"Bearer {token}"

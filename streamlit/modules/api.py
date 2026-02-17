@@ -1,9 +1,37 @@
 import streamlit as st
 import requests
+from modules.config import AUTH_SERVICE_URL
 
-def make_request(url, method="GET", data=None, use_form_data=False):
+def refresh_access_token():
     """
-    Make HTTP request to a service with automatic token handling.
+    Attempts to refresh the access token using the stored refresh token.
+    Returns True if successful, False otherwise.
+    """
+    refresh_token = st.session_state.get("refresh_token")
+    if not refresh_token:
+        return False
+    
+    try:
+        headers = {"X-Refresh-Token": refresh_token}
+        response = requests.post(
+            f"{AUTH_SERVICE_URL}/api/v1/auth/refresh",
+            headers=headers
+        )
+        
+        if response.status_code in [200, 201]:
+            token_data = response.json()
+            st.session_state.token = token_data.get("access_token")
+            st.session_state.refresh_token = token_data.get("refresh_token")
+            return True
+        else:
+            return False
+            
+    except requests.RequestException:
+        return False
+
+def make_request(url, method="GET", data=None, use_form_data=False, retry_on_401=True):
+    """
+    Make HTTP request to a service with automatic token handling and refresh.
     """
     headers = {}
 
@@ -38,14 +66,19 @@ def make_request(url, method="GET", data=None, use_form_data=False):
             return response.json()
             
         elif response.status_code == 401:
-            # Handle unauthorized access
-            # Only trigger a full logout/rerun if we thought we were authenticated
-            if st.session_state.get("authenticated"):
-                st.error("Session expired. Please login again.")
-                st.session_state.authenticated = False
-                st.session_state.token = None
-                st.rerun()
-            return None
+            # Try to refresh token if we haven't already
+            if retry_on_401 and refresh_access_token():
+                # Retry the request with new token
+                return make_request(url, method=method, data=data, use_form_data=use_form_data, retry_on_401=False)
+            else:
+                # Refresh failed or already retried, logout
+                if st.session_state.get("authenticated"):
+                    st.error("Session expired. Please login again.")
+                    st.session_state.authenticated = False
+                    st.session_state.token = None
+                    st.session_state.refresh_token = None
+                    st.rerun()
+                return None
             
         elif response.status_code == 403:
             st.error("Access denied.")

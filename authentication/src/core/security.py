@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Union, Optional, Dict
 from jose import jwt
 from passlib.context import CryptContext
@@ -23,9 +23,9 @@ def create_token(subject: Union[str, Any], token_type: str, expires_delta: timed
     :param expires_delta: custom expiration time
     """
     if expires_delta:
-        expire = datetime.now() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now() + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     
     to_encode = {
         "exp": expire,

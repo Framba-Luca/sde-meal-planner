@@ -7,13 +7,6 @@ from src.infrastructure.user_client import UserRemoteRepository
 
 router = APIRouter()
 
-@router.get("/me", response_model=User)
-def read_user_me(current_user: User = Depends(deps.get_current_user)):
-    """
-    Retrieves the profile of the currently logged-in user.
-    """
-    return current_user
-
 @router.get("/", response_model=List[User])
 async def read_users(
     skip: int = 0,
@@ -22,6 +15,7 @@ async def read_users(
 ):
     """
     Retrieves the list of all users.
+    Note: The /me endpoint is in auth.py for consistency.
     """
     users = await user_repo.get_users(skip=skip, limit=limit)
     return users

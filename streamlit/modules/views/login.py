@@ -21,13 +21,17 @@ def render_login_page():
                 result = make_request(f"{AUTH_SERVICE_URL}/api/v1/auth/login", method="POST", data=data, use_form_data=True)
                 
                 if result and "access_token" in result:
-                    # 1. Save token in session
+                    # 1. Save both tokens in session
                     st.session_state.token = result["access_token"]
+                    st.session_state.refresh_token = result.get("refresh_token")
                     
                     # 2. Retrieve user data 
                     if fetch_current_user():
                         st.success("Login successful!")
+                        # 3. Save both tokens in cookies
                         cookie_manager.set("access_token", result["access_token"], key="login_token")
+                        if result.get("refresh_token"):
+                            cookie_manager.set("refresh_token", result["refresh_token"], key="login_refresh")
                         st.rerun()
                     else:
                         st.error("Login failed: Token valid but unable to fetch user profile.")

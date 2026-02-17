@@ -83,6 +83,14 @@ async def get_current_user(
         if username is None:
             raise credentials_exception
         
+        # Validate token type (MUST be 'access', not 'refresh')
+        token_type = payload.get("type")
+        if token_type != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type. Access token required."
+            )
+        
         # We can map other claims here if needed
         token_data = TokenPayload(**payload)
         
@@ -95,5 +103,12 @@ async def get_current_user(
     user_data = await user_repo.get_user_by_username(username)
     if user_data is None:
         raise credentials_exception
+    
+    # D. Check if user is disabled (security: immediate revocation)
+    if user_data.get("disabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is disabled"
+        )
         
     return User(**user_data)

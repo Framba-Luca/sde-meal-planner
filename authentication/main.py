@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import sys
 import os
+import redis.asyncio as redis
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -34,6 +35,14 @@ async def invalid_credentials_handler(request: Request, exc: exc.InvalidCredenti
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+@app.exception_handler(exc.InvalidToken)
+async def invalid_token_handler(request: Request, exc: exc.InvalidToken):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
 @app.exception_handler(exc.UserAlreadyExists)
 async def user_exists_handler(request: Request, exc: exc.UserAlreadyExists):
     return JSONResponse(
@@ -46,6 +55,22 @@ async def service_unavailable_handler(request: Request, exc: exc.ServiceUnavaila
     return JSONResponse(
         status_code=503,
         content={"detail": "Service temporarily unavailable, please try again later."},
+    )
+
+@app.exception_handler(redis.ConnectionError)
+async def redis_connection_error_handler(request: Request, exc: redis.ConnectionError):
+    """Handle Redis connection failures"""
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Authentication service temporarily unavailable (Redis connection error)"},
+    )
+
+@app.exception_handler(redis.ResponseError)
+async def redis_response_error_handler(request: Request, exc: redis.ResponseError):
+    """Handle Redis command response failures"""
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Authentication service temporarily unavailable (Redis error)"},
     )
 
 # --- Include Routers ---

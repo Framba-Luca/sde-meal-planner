@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from jose import jwt, JWTError
 from src.core import security
 from src.core.config import settings
@@ -52,34 +52,44 @@ class AuthService:
         """
         Refresh the access token using a valid refresh token.
         """
-
         try:
-            # 1. Validation to correct token type
+            # 1. Decode and validate token type
             payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             if payload.get("type") != "refresh":
                 raise exc.InvalidToken("Provided token is not a refresh token")
             
-            # 2. Check Blacklist
+            # 2. Check Blacklist (can raise Redis errors)
             if await redis_client.is_token_revoked(refresh_token):
                 raise exc.InvalidToken("Refresh token has been revoked")
             
-            # 3. Checks User existence
+            # 3. Check User existence (can raise ServiceUnavailable)
             username = payload.get("sub")
             user_data = await self.user_repo.get_user_by_username(username)
             if not user_data:
                 raise exc.InvalidToken("User not found")
             
-            # 4. Revoke old refresh token
+            # 4. Check if user is disabled
+            if user_data.get("disabled", False):
+                raise exc.InvalidToken("User account is disabled")
+            
+            # 5. Revoke old refresh token (can raise Redis errors)
             exp = payload.get("exp")
-            ttl = int(exp - datetime.now().timestamp())
+            ttl = int(exp - datetime.now(timezone.utc).timestamp())
             if ttl > 0:
                 await redis_client.add_to_blacklist(refresh_token, ttl)
 
-            # 5. Generate new tokens
+            # 6. Generate new tokens
             return await self._create_user_token(user_data)
-    
+            
+        except exc.InvalidToken:
+            raise  # re-raise InvalidToken as is
+        except exc.ServiceUnavailable:
+            raise  # re-raise ServiceUnavailable as is
         except JWTError:
             raise exc.InvalidToken("Could not validate refresh token")
+        except Exception as e:
+            # Catch any other errors (Redis, network, etc.)
+            raise exc.ServiceUnavailable(f"Refresh token service error: {str(e)}")
 
     async def logout(self, token: str) -> None:
         """
@@ -88,11 +98,15 @@ class AuthService:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             exp = payload.get("exp")
-            ttl = int(exp - datetime.now().timestamp())
+            ttl = int(exp - datetime.now(timezone.utc).timestamp())
             if ttl > 0:
                 await redis_client.add_to_blacklist(token, ttl)
         except JWTError:
             raise exc.InvalidToken("Could not validate token for logout")
+        except Exception as e:
+            # If Redis fails but token is valid, let it fail gracefully
+            # (token will auto-expire anyway)
+            raise exc.ServiceUnavailable("Could not revoke token (Redis unavailable)")
 
     async def register_new_user(self, user_in: UserCreate) -> User:
         """

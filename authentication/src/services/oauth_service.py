@@ -95,8 +95,6 @@ class GoogleAuthService:
         user_db_id = db_user.get("id")
         uid = db_user["username"]
         fullname_claim = db_user.get("full_name")
-
-        print(f"DEBUG: Generating Token. User: {uid}, ID: {user_db_id}")
         
         # 6. Create the platform JWT Token
         access_token = security.create_access_token(

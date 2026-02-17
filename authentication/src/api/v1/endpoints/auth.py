@@ -79,11 +79,7 @@ async def google_callback(
     Redirect to frontend with token.
     """
     try:
-        print(f"DEBUG: Ricevuto codice da Google: {code[:10]}...") # Log di debug
-        
         token = await service.callback_handler(code)
-        
-        print(f"DEBUG: Token generato con successo per user: {token.user.username}") # Log di debug
 
         # URL frontend redirection with token params
         params = {

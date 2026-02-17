@@ -29,7 +29,6 @@ class UserRemoteRepository:
                     
             except httpx.RequestError as e:
                 # Qui catturiamo timeout, connessione rifiutata, dns error...
-                print(f"Connection error to Database Service: {e}")
                 raise exc.ServiceUnavailable("Database service is unreachable")
 
     async def create_user(self, user_in: UserCreate, hashed_password: str) -> Dict[str, Any]:
