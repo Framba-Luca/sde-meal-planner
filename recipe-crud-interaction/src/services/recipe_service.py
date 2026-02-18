@@ -28,7 +28,12 @@ class RecipeService(BaseInternalClient):
 
     def create_recipe(self, user_id: int, data: Dict):
         url = f"{settings.DATABASE_SERVICE_URL}/api/v1/recipes"
-        result = self._req("POST", url, {"user_id": user_id, **data})
+        # Ensure tags format is compatible with database service (DB expects a comma-separated string)
+        payload = {"user_id": user_id, **data}
+        if isinstance(payload.get("tags"), list):
+            payload["tags"] = ",".join(payload.get("tags", []))
+
+        result = self._req("POST", url, payload)
         
         cache_client.delete(f"recipes:user:{user_id}")
         return result
@@ -100,6 +105,10 @@ class RecipeService(BaseInternalClient):
              return {"error": "Cannot update external recipes directly.", "code": 403}
         if int(existing_recipe.get("user_id")) != int(user_id):
             return {"error": "Permission denied. You do not own this recipe.", "code": 403}
+
+        # Convert tags list to comma-separated string for DB compatibility
+        if isinstance(data.get("tags"), list):
+            data["tags"] = ",".join(data.get("tags", []))
 
         result = self._req("PUT", f"{self.db_service_url}/recipes/{recipe_id}", data)
         

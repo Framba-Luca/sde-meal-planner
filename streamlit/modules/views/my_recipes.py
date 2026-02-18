@@ -38,7 +38,6 @@ def _render_view_recipes_tab():
                 
                 with c1:
                     st.caption(f"Category: {recipe.get('category', '-')} | Area: {recipe.get('area', '-')}")
-                    st.write(f"**Tags:** {recipe.get('tags', '-')}")
                     st.markdown("**Instructions:**")
                     st.write(recipe.get('instructions', 'No instructions provided.'))
                     if recipe.get("image"):
@@ -61,46 +60,17 @@ def _render_add_recipe_tab():
     """
     st.subheader("Add New Recipe")
     
-    # --- Tags and Ingredients builder (outside the form because buttons aren't allowed inside forms) ---
-    # Initialize tag suggestions and ingredient list in session
-    if "recipe_tag_suggestions" not in st.session_state:
-        # populate tag suggestions with categories from the fetch service (same logic as recipe_search)
-        try:
-            resp_tags = make_request(f"{RECIPES_FETCH_URL}/categories")
-            cats = [c.get("strCategory") for c in (resp_tags.get("categories") if resp_tags else []) if c.get("strCategory")]
-        except Exception:
-            cats = []
-        st.session_state["recipe_tag_suggestions"] = cats
-    if "new_recipe_tags_selected" not in st.session_state:
-        st.session_state["new_recipe_tags_selected"] = []
+    # --- Ingredients builder (tags removed) ---
+    # Initialize ingredient list in session
     if "new_recipe_ingredients" not in st.session_state:
         st.session_state["new_recipe_ingredients"] = []
     # Clear-input flags: if set, clear the corresponding widget values before widgets are created
-    if st.session_state.get("_clear_ui_tag"):
-        st.session_state["ui_new_tag"] = ""
-        st.session_state.pop("_clear_ui_tag", None)
     if st.session_state.get("_clear_ui_ing"):
         st.session_state["ui_ing_name"] = ""
         st.session_state["ui_ing_measure"] = ""
         st.session_state.pop("_clear_ui_ing", None)
 
-    st.subheader("Add New Recipe")
-
-    # Tags UI
-    st.markdown("**Tags**")
-    tag_suggestions = st.session_state.get("recipe_tag_suggestions", [])
-    if st.button("➕ Add tag", key="ui_add_tag"):
-        nt = (st.session_state.get("ui_new_tag") or "").strip()
-        if nt:
-            if nt not in tag_suggestions:
-                tag_suggestions.append(nt)
-                st.session_state["recipe_tag_suggestions"] = tag_suggestions
-            sel = st.session_state.get("new_recipe_tags_selected", [])
-            if nt not in sel:
-                sel.append(nt)
-                st.session_state["new_recipe_tags_selected"] = sel
-            # set flag to clear input on next run (avoid modifying widget state after creation)
-            st.session_state["_clear_ui_tag"] = True
+    # Tags removed (no UI)
 
     # Ingredients builder
     st.markdown("**Ingredients**")
@@ -193,19 +163,9 @@ def _render_add_recipe_tab():
             # Collect ingredients from interactive builder (session_state)
             ingredients_list = st.session_state.get("new_recipe_ingredients", [])
 
-            # Resolve tags: merge selected from multiselect (`ui_selected_tags`) and any manually added tags
-            multisel = st.session_state.get("ui_selected_tags", []) or []
-            added = st.session_state.get("new_recipe_tags_selected", []) or []
-            # keep order: multiselect first, then added (avoid duplicates)
-            seen = set()
-            final_tags = []
-            for t in multisel + added:
-                if t and t not in seen:
-                    final_tags.append(t)
-                    seen.add(t)
 
-            # Convert tags to string for DB (comma-separated) to match backend schema
-            tags_str = ",".join(final_tags) if final_tags else ""
+            # Tags removed per request — send no tags
+            tags_list = []
 
             # Prepare payload matching the API expectation
             payload = {
@@ -216,7 +176,7 @@ def _render_add_recipe_tab():
                 "instructions": instructions,
                 "ingredients": ingredients_list,
                 "image": image,
-                "tags": tags_str
+                # no tags
             }
             
             if make_request(f"{recipe_url}/recipes/", method="POST", data=payload):
